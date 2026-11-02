@@ -34,7 +34,7 @@ public enum WarpPlanner {
     /// are assumed to sit at the calibrated reading offset and the correction undoes that fixed offset.
     /// `follow` (0...1) blends in the measured deviation from the reading centre, to also cancel the
     /// left-right sweep of reading at the cost of passing measurement noise into the warp.
-    /// `strength` scales the fixed offset, since landmark-based estimates tend to under-read it.
+    /// `strength` scales both, since landmark-based estimates tend to under-read eye rotation.
     public static func plan(eyes: [EyeMeasurement], calibration: Calibration, output: DirectorOutput, maxDisplacement: Double, follow: Double = 0, strength: Double = 1) -> [EyeWarp] {
         guard output.weight > 0.001, eyes.count == calibration.cameraUV.count else { return [] }
         return zip(eyes, calibration.cameraUV).map { eye, cameraUV in
@@ -42,7 +42,7 @@ public enum WarpPlanner {
             let measured = eye.irisUV - cameraUV
             var current = measured
             if let offset = calibration.readingOffset, let center = calibration.readingCenter {
-                current = offset * strength + (measured - center) * follow
+                current = (offset + (measured - center) * follow) * strength
             }
             let deltaUV = ((output.target - current) * output.weight).clamped(maxLength: maxDisplacement)
             return EyeWarp(

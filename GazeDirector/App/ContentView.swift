@@ -71,7 +71,7 @@ struct ContentView: View {
                 LabeledContent("Follow reading motion") {
                     Slider(value: $model.settings.followReading, in: 0...1)
                 }
-                Text("0 = steady fixed correction. Higher also cancels the left-right reading sweep but passes tracking jitter into the eyes.")
+                Text("0 = fixed correction only. Higher also cancels the left-right reading sweep, with a little more jitter and stretching at line ends.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

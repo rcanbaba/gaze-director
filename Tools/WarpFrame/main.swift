@@ -2,7 +2,7 @@
 // session, and writes a before/after sheet: both eyes at 2× (roughly how a call shows them) and
 // each eye at 6×.
 //
-// Usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0]
+// Usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0] [--follow 0]
 //   Columns: reading frame as recorded | corrected | a frame from the camera step (the goal).
 
 import CoreGraphics
@@ -15,15 +15,17 @@ import UniformTypeIdentifiers
 
 let useGradient = CommandLine.arguments.contains("--gradient")
 var strength = 1.0
+var follow = 0.0
 var arguments: [String] = []
 var argumentIterator = CommandLine.arguments.makeIterator()
 while let argument = argumentIterator.next() {
     if argument == "--gradient" { continue }
     if argument == "--strength", let value = argumentIterator.next().flatMap(Double.init) { strength = value; continue }
+    if argument == "--follow", let value = argumentIterator.next().flatMap(Double.init) { follow = value; continue }
     arguments.append(argument)
 }
 guard arguments.count == 5 else {
-    print("usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0]")
+    print("usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0] [--follow 0]")
     exit(2)
 }
 
@@ -82,7 +84,7 @@ let reference = FileManager.default.fileExists(atPath: referencePath) ? loadFram
 let referenceEyes = reference.map(measureEyes) ?? []
 
 let output = DirectorOutput(target: .zero, weight: 1, state: .engaged)
-let warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: output, maxDisplacement: 0.16, strength: strength)
+let warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: output, maxDisplacement: 0.16, follow: follow, strength: strength)
 for (i, w) in warps.enumerated() {
     print(String(format: "eye %d: displacement (%+.1f, %+.1f) px", i, w.displacement.x, w.displacement.y))
 }
