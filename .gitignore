@@ -1,0 +1,14 @@
+# Xcode / XcodeGen
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# Local tool output
+Tools/out/
