@@ -44,6 +44,8 @@ Run the `GazeDirector` scheme. The run configuration is Release because the per-
 3. Click **2 · Read your text normally** and read for 8 seconds.
 4. Read. The gaze map shows the reading zone (blue), your real gaze (●) and where the eyes are being shown (○). The debug overlay draws the eye contours, the tracked iris and the target.
 
+To judge the result, use **Record 15 s clip** and read normally. Watching the live preview while reading moves your gaze out of the reading zone, which switches the correction off. The clip saves original | corrected side by side to `~/Movies/GazeDirector` and opens it. A green square marks corrected frames.
+
 Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*), glances on/off, and max correction (in fractions of eye width; above roughly 0.16 the warp becomes noticeable).
 
 ## Tools

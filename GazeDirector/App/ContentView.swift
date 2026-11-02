@@ -76,6 +76,23 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Before / after clip") {
+                Button("Record 15 s clip, then read normally") { model.recordClip() }
+                    .disabled(model.clipProgress != nil)
+                if let progress = model.clipProgress {
+                    ProgressView(value: progress)
+                }
+                Text("Saves original | corrected side by side to Movies/GazeDirector and opens it. A green square marks frames being corrected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if model.clipFailed {
+                    Text("Could not record the clip.").font(.callout).foregroundStyle(.red)
+                }
+                if let url = model.lastClipURL {
+                    Button("Show last clip in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                }
+            }
+
             Section("Live") {
                 GazeMap(frame: model.debugFrame)
                     .frame(height: 150)

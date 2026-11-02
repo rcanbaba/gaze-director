@@ -80,6 +80,7 @@ final class Pipeline: @unchecked Sendable {
     let settings = Locked(ProcessingSettings())
     let calibration = Locked<Calibration?>(nil)
     let pendingCalibration = Locked<CalibrationRecorder.Step?>(nil)
+    let pendingClip = Locked(false)
     var isSpeaking: () -> Bool = { false }
 
     var onStats: ((PipelineStats) -> Void)?
@@ -87,6 +88,8 @@ final class Pipeline: @unchecked Sendable {
     var onEyeZoom: ((EyeZoom) -> Void)?
     var onCalibrationProgress: ((CalibrationProgress?) -> Void)?
     var onCalibrationFinished: ((CalibrationRecorder.Step, Calibration?) -> Void)?
+    var onClipProgress: ((Double?) -> Void)?
+    var onClipFinished: ((URL?) -> Void)?
 
     private let display: VideoDisplay
     private let warper = MetalWarper()
@@ -96,6 +99,7 @@ final class Pipeline: @unchecked Sendable {
     private var eyeTrackers = [EyeTracker(), EyeTracker()]
     private var director = GazeDirector()
     private var recorder: CalibrationRecorder?
+    private var clip: ClipRecorder?
     private var frameCount = 0
 
     private var statsWindowStart = CACurrentMediaTime()
@@ -142,6 +146,7 @@ final class Pipeline: @unchecked Sendable {
 
         let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
         display.show(output)
+        recordClip(original: pixelBuffer, corrected: output, eyes: eyes, correcting: !warps.isEmpty && decision.weight > 0.5, time: time)
 
         frameCount += 1
         if settings.eyeZoom, eyes.count == 2, frameCount.isMultiple(of: 2) {
@@ -203,6 +208,29 @@ final class Pipeline: @unchecked Sendable {
         } else {
             recorder = current
             onCalibrationProgress?(CalibrationProgress(step: current.step, progress: current.progress(at: time)))
+        }
+    }
+
+    private func recordClip(original: CVPixelBuffer, corrected: CVPixelBuffer, eyes: [EyeMeasurement], correcting: Bool, time: Double) {
+        // Start once both eyes are in view, so the clip can be framed around them.
+        if clip == nil, eyes.count == 2, pendingClip.mutate({ value -> Bool in
+            defer { value = false }
+            return value
+        }) {
+            let size = CGSize(width: CVPixelBufferGetWidth(original), height: CVPixelBufferGetHeight(original))
+            clip = ClipRecorder(eyes: eyes, frameSize: size)
+            if clip == nil { onClipFinished?(nil) }
+        }
+        guard let current = clip else { return }
+
+        current.append(original: original, corrected: corrected, correcting: correcting, time: time) { [weak self] url in
+            self?.onClipFinished?(url)
+        }
+        if current.finished {
+            clip = nil
+            onClipProgress?(nil)
+        } else {
+            onClipProgress?(current.progress(at: time))
         }
     }
 

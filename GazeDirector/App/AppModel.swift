@@ -36,6 +36,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var stats = PipelineStats()
     @Published private(set) var debugFrame = DebugFrame()
     @Published private(set) var eyeZoom = EyeZoom()
+    @Published private(set) var clipProgress: Double?
+    @Published private(set) var lastClipURL: URL?
+    @Published private(set) var clipFailed = false
     @Published private(set) var cameraDenied = false
     @Published private(set) var microphoneDenied = false
 
@@ -64,6 +67,12 @@ final class AppModel: ObservableObject {
         }
         pipeline.onCalibrationFinished = { [weak self] step, result in
             DispatchQueue.main.async { self?.finishCalibration(step: step, result: result) }
+        }
+        pipeline.onClipProgress = { [weak self] progress in
+            DispatchQueue.main.async { self?.clipProgress = progress }
+        }
+        pipeline.onClipFinished = { [weak self] url in
+            DispatchQueue.main.async { self?.finishClip(url) }
         }
         camera.onFrame = { [pipeline] sampleBuffer in
             pipeline.process(sampleBuffer)
@@ -123,6 +132,24 @@ final class AppModel: ObservableObject {
         } else {
             UserDefaults.standard.removeObject(forKey: Self.calibrationKey)
         }
+    }
+
+    // MARK: Before/after clip
+
+    func recordClip() {
+        clipFailed = false
+        clipProgress = 0
+        pipeline.pendingClip.set(true)
+    }
+
+    private func finishClip(_ url: URL?) {
+        clipProgress = nil
+        guard let url else {
+            clipFailed = true
+            return
+        }
+        lastClipURL = url
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: Microphone
