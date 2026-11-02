@@ -74,6 +74,7 @@ final class Pipeline: @unchecked Sendable {
     var onCalibrationFinished: ((CalibrationRecorder.Step, Calibration?) -> Void)?
 
     private let display: VideoDisplay
+    private let warper = MetalWarper()
     private let faceTracker = FaceTracker()
     private var eyeTrackers = [EyeTracker(), EyeTracker()]
     private var director = GazeDirector()
@@ -117,7 +118,8 @@ final class Pipeline: @unchecked Sendable {
             warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection)
         }
 
-        display.show(pixelBuffer)
+        let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
+        display.show(output)
 
         if settings.showOverlay {
             var frame = debugFrame(for: pixelBuffer, eyes: eyes, warps: warps)

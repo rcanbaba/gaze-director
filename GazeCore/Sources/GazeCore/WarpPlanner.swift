@@ -12,6 +12,15 @@ public struct EyeWarp: Equatable, Sendable {
     /// Half width and half height of the eye opening.
     public var halfSize: Vec2
     public var irisRadius: Double
+
+    public init(iris: Vec2, displacement: Vec2, center: Vec2, axis: Vec2, halfSize: Vec2, irisRadius: Double) {
+        self.iris = iris
+        self.displacement = displacement
+        self.center = center
+        self.axis = axis
+        self.halfSize = halfSize
+        self.irisRadius = irisRadius
+    }
 }
 
 public enum WarpPlanner {

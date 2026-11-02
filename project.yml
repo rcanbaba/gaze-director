@@ -37,3 +37,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.rcanbaba.GazeDirector
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
+schemes:
+  GazeDirector:
+    build:
+      targets:
+        GazeDirector: all
+    # The per-frame iris search is plain Swift loops; unoptimised builds are several times slower.
+    run:
+      config: Release
+    archive:
+      config: Release
