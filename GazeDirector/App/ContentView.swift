@@ -7,6 +7,9 @@ struct ContentView: View {
         HStack(spacing: 0) {
             ZStack {
                 VideoPreview(display: model.display, mirrored: model.settings.mirrored)
+                if model.settings.showOverlay {
+                    DebugOverlay(frame: model.debugFrame, mirrored: model.settings.mirrored)
+                }
                 if model.cameraDenied {
                     Text("Camera access was denied. Allow it in System Settings → Privacy & Security → Camera.")
                         .padding()

@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
         didSet { pipeline.settings.set(settings) }
     }
     @Published private(set) var stats = PipelineStats()
+    @Published private(set) var debugFrame = DebugFrame()
     @Published private(set) var cameraDenied = false
 
     let display = VideoDisplay()
@@ -28,6 +29,9 @@ final class AppModel: ObservableObject {
         pipeline = Pipeline(display: display)
         pipeline.onStats = { [weak self] stats in
             DispatchQueue.main.async { self?.stats = stats }
+        }
+        pipeline.onDebug = { [weak self] frame in
+            DispatchQueue.main.async { self?.debugFrame = frame }
         }
         camera.onFrame = { [pipeline] sampleBuffer in
             pipeline.process(sampleBuffer)
