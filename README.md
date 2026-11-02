@@ -40,8 +40,8 @@ Run the `GazeDirector` scheme. The run configuration is Release because the per-
 ## Using it
 
 1. Put the text you will read **at the top centre of the screen, right under the camera**, in a **narrow column**. This one setting matters more than any algorithm tweak: it keeps the needed correction to a few degrees, where the warp is hard to spot.
-2. Click **1 · Look at the camera lens** and look straight into the lens for 2 seconds.
-3. Click **2 · Read your text normally** and read for 8 seconds.
+2. Click **Calibrate** and look straight into the lens. After 2 seconds a chime plays: read your text normally until the second chime (8 seconds). Doing only the camera step clears the reading zone and turns correction off; the badge on the preview says so.
+3. Read.
 4. Read. The gaze map shows the reading zone (blue), your real gaze (●) and where the eyes are being shown (○). The debug overlay draws the eye contours, the tracked iris and the target.
 
 To judge the result, use **Record 15 s clip** and read normally. Watching the live preview while reading moves your gaze out of the reading zone, which switches the correction off. The clip saves original | corrected side by side to `~/Movies/GazeDirector` and opens it. A green square marks corrected frames.

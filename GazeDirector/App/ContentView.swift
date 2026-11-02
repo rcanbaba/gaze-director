@@ -18,6 +18,10 @@ struct ContentView: View {
                 }
                 if let progress = model.calibrationProgress {
                     CalibrationPrompt(progress: progress)
+                } else {
+                    statusBadge
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 if model.settings.eyeZoom, !model.eyeZoom.original.isEmpty {
                     EyeZoomPanel(zoom: model.eyeZoom, mirrored: model.settings.mirrored)
@@ -31,12 +35,33 @@ struct ContentView: View {
         }
     }
 
+    /// Whether the correction is running right now. It switches off while you look at this window,
+    /// since that is outside the reading zone; record a clip to see it while reading.
+    private var statusBadge: some View {
+        let (text, color): (String, Color) = {
+            if !model.isCalibrated { return ("Correction OFF: calibrate first", .red) }
+            if !model.settings.effectEnabled { return ("Correction disabled", .gray) }
+            switch model.debugFrame.state {
+            case .engaged, .glancing: return ("Correcting", .green)
+            case .passthrough: return ("Not reading: real eyes shown", .orange)
+            case .noFace: return ("No face", .gray)
+            }
+        }()
+        return Text(text)
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(color.opacity(0.85), in: Capsule())
+    }
+
     private var sidebar: some View {
         Form {
             Section("Calibration") {
-                Button("1 · Look at the camera lens (2 s)") { model.calibrate(.camera) }
+                Button("Calibrate: lens 2 s, chime, read 8 s") { model.calibrateFully() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(model.calibrationProgress != nil)
-                Button("2 · Read your text normally (8 s)") { model.calibrate(.reading) }
+                Button("Redo reading step only (8 s)") { model.calibrate(.reading) }
                     .disabled(model.calibrationProgress != nil || !model.canCalibrateReading)
                 LabeledContent("Status", value: calibrationStatus)
                 if let message = model.calibrationMessage {

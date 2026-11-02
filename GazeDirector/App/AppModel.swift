@@ -102,6 +102,21 @@ final class AppModel: ObservableObject {
 
     var canCalibrateReading: Bool { calibration != nil }
 
+    /// Correction only runs with both steps done; a new camera step clears the reading zone.
+    var isCalibrated: Bool {
+        guard let calibration else { return false }
+        return calibration.readingZone != nil && calibration.readingCenter != nil && calibration.readingOpennessChange != nil
+    }
+
+    /// Set while a full calibration runs, so the reading step follows the camera step by itself.
+    private var chainReadingStep = false
+
+    /// Both steps in one go: camera lens for 2 s, a chime, then read for 8 s, another chime.
+    func calibrateFully() {
+        chainReadingStep = true
+        calibrate(.camera)
+    }
+
     func calibrate(_ step: CalibrationRecorder.Step) {
         calibrationMessage = nil
         calibrationProgress = CalibrationProgress(step: step, progress: 0)
@@ -116,13 +131,26 @@ final class AppModel: ObservableObject {
     private func finishCalibration(step: CalibrationRecorder.Step, result: Calibration?) {
         calibrationProgress = nil
         guard let result else {
+            chainReadingStep = false
             calibrationMessage = "Not enough clear frames. Keep your face in view and try again."
             return
         }
         calibration = result
-        calibrationMessage = switch step {
-        case .camera: "Camera point saved. Now read some text for step 2."
-        case .reading: "Reading zone saved. Redirection is active while you read."
+        switch step {
+        case .camera where chainReadingStep:
+            chainReadingStep = false
+            NSSound(named: "Tink")?.play()
+            // Show the reading prompt right away and give the eyes a moment to reach the text.
+            calibrationProgress = CalibrationProgress(step: .reading, progress: 0)
+            Task {
+                try? await Task.sleep(for: .seconds(1.2))
+                calibrate(.reading)
+            }
+        case .camera:
+            calibrationMessage = "Camera point saved. Correction stays off until you redo the reading step."
+        case .reading:
+            NSSound(named: "Glass")?.play()
+            calibrationMessage = "Done. Correction is on while you read."
         }
     }
 
