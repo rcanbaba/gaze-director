@@ -3,7 +3,7 @@
 //
 // Usage: eye-probe <image> <output.png> [x y width height]
 //   The optional rectangle crops the input first (for example the preview area of a screenshot);
-//   the crop is scaled to 1280 px wide like a 720p camera frame.
+//   the crop is scaled to 1280 px wide like a 720p camera frame. Without it the image is used as is.
 
 import CoreGraphics
 import CoreVideo
@@ -27,7 +27,8 @@ if arguments.count == 7, let r = arguments[3...6].map({ Double($0) }) as? [Doubl
     image = cropped
 }
 
-let width = 1280
+// Saved camera frames are used as they are; screenshot crops are scaled to a 720p-like width.
+let width = arguments.count == 7 ? 1280 : image.width
 let height = Int((Double(image.height) / Double(image.width) * Double(width)).rounded())
 let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 

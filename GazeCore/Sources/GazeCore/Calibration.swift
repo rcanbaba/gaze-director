@@ -27,11 +27,15 @@ public struct Calibration: Codable, Equatable, Sendable {
     public var openness: Double
     /// Range of the gaze offset while reading. Redirection only happens inside it.
     public var readingZone: GazeRect?
+    /// Typical gaze offset while reading (median). The warp corrects by this fixed amount, which is
+    /// far steadier than following the per-frame iris estimate.
+    public var readingCenter: Vec2?
 
-    public init(cameraUV: [Vec2], openness: Double, readingZone: GazeRect? = nil) {
+    public init(cameraUV: [Vec2], openness: Double, readingZone: GazeRect? = nil, readingCenter: Vec2? = nil) {
         self.cameraUV = cameraUV
         self.openness = openness
         self.readingZone = readingZone
+        self.readingCenter = readingCenter
     }
 
     /// Mean offset of both irises from their camera positions.
@@ -109,6 +113,7 @@ public struct CalibrationRecorder: Sendable {
                 minY: percentile(ys, 0.05) - zoneMargin,
                 maxY: percentile(ys, 0.95) + zoneMargin
             )
+            calibration.readingCenter = Vec2(percentile(xs, 0.5), percentile(ys, 0.5))
             return calibration
         }
     }

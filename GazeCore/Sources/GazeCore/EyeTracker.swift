@@ -11,6 +11,15 @@ public struct EyeMeasurement: Sendable {
     /// True when the gradient locator produced the estimate, false when it fell back to Vision's pupil.
     public let refined: Bool
     public let isBlinking: Bool
+
+    public init(frame: EyeFrame, irisUV: Vec2, rawIrisUV: Vec2, visionPupilUV: Vec2?, refined: Bool, isBlinking: Bool) {
+        self.frame = frame
+        self.irisUV = irisUV
+        self.rawIrisUV = rawIrisUV
+        self.visionPupilUV = visionPupilUV
+        self.refined = refined
+        self.isBlinking = isBlinking
+    }
 }
 
 /// Measures one eye over time: refines the iris centre, smooths it, and freezes it through blinks.

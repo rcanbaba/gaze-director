@@ -20,8 +20,9 @@ public struct GrayImage: Sendable {
 
 /// Grid used to resample an eye into an eye-aligned crop. The crop spans u in ±uExtent and v in ±vExtent.
 public struct EyeCropLayout: Sendable {
-    public var width = 48
-    public var height = 24
+    /// About one cell per pixel for a 55 px wide eye in a 1080p frame.
+    public var width = 64
+    public var height = 32
     public var uExtent = 0.6
     public var vExtent = 0.3
 

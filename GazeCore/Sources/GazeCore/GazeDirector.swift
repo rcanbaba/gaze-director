@@ -24,6 +24,12 @@ public struct DirectorConfig: Equatable, Sendable {
     public var exitDwell = 0.2
     /// Head turned further than this (radians) disables redirection.
     public var maxHeadYaw = 0.45
+    /// With a calibrated reading centre, the gaze is placed on the line from the camera point (0) to
+    /// the reading centre (1). Engage above `enterProgress`, let go below `exitProgress`.
+    public var enterProgress = 0.6
+    public var exitProgress = 0.4
+    /// A reading centre closer to the camera point than this needs no correction.
+    public var minReadingOffset = 0.02
 
     public init() {}
 }
@@ -59,6 +65,8 @@ public struct DirectorOutput: Sendable {
     public var weight: Double
     public var state: DirectorState
     public var nextGlanceIn: Double?
+    /// The low-passed gaze offset the engagement decision was made on.
+    public var smoothedGaze: Vec2?
 }
 
 /// Decides, frame by frame, where the eyes should appear to look.
@@ -69,8 +77,12 @@ public struct DirectorOutput: Sendable {
 public struct GazeDirector: Sendable {
     public var config: DirectorConfig
     public var readingZone: GazeRect?
+    public var readingCenter: Vec2?
 
     private var rng: SplitMix64
+    /// Per-frame gaze jitters by about a reading saccade; decide on a low-passed version.
+    private var gazeFilter = OneEuroFilter2D(minCutoff: 1.0, beta: 1.0)
+    private var smoothedGaze: Vec2?
     private var engaged = false
     private var outsideSince: Double?
     private var linearWeight = 0.0
@@ -81,9 +93,10 @@ public struct GazeDirector: Sendable {
     private var nextGlanceAt: Double?
     private var nextMicroAt: Double?
 
-    public init(config: DirectorConfig = DirectorConfig(), readingZone: GazeRect? = nil, seed: UInt64 = UInt64.random(in: 1...UInt64.max)) {
+    public init(config: DirectorConfig = DirectorConfig(), readingZone: GazeRect? = nil, readingCenter: Vec2? = nil, seed: UInt64 = UInt64.random(in: 1...UInt64.max)) {
         self.config = config
         self.readingZone = readingZone
+        self.readingCenter = readingCenter
         self.rng = SplitMix64(seed: seed)
     }
 
@@ -119,22 +132,37 @@ public struct GazeDirector: Sendable {
             target: offset.value(at: t),
             weight: smoothstep(linearWeight),
             state: state,
-            nextGlanceIn: nextGlanceAt.map { max(0, $0 - t) }
+            nextGlanceIn: nextGlanceAt.map { max(0, $0 - t) },
+            smoothedGaze: smoothedGaze
         )
+    }
+
+    /// 0 at the camera point, 1 at the reading centre. Without a reading centre the zone alone decides.
+    private func readingProgress(_ gaze: Vec2) -> Double {
+        guard let center = readingCenter else { return 1 }
+        let lengthSquared = center.dot(center)
+        guard lengthSquared.squareRoot() >= config.minReadingOffset else { return 0 }
+        return gaze.dot(center) / lengthSquared
     }
 
     private mutating func updateEngagement(_ input: DirectorInput) {
         let headOK = input.headYaw.map { abs($0) < config.maxHeadYaw } ?? true
-        guard let gaze = input.gazeOffset, let zone = readingZone, headOK else {
+        guard let raw = input.gazeOffset, let zone = readingZone, headOK else {
             engaged = false
             outsideSince = nil
+            gazeFilter.reset()
+            smoothedGaze = nil
             return
         }
         // Gaze is frozen during blinks, so keep whatever was decided before the blink.
         if input.isBlinking { return }
 
+        let gaze = gazeFilter.filter(raw, at: input.time)
+        smoothedGaze = gaze
+        let progress = readingProgress(gaze)
+
         if engaged {
-            if zone.contains(gaze, margin: config.zoneMargin) {
+            if zone.contains(gaze, margin: config.zoneMargin) && progress >= config.exitProgress {
                 outsideSince = nil
             } else {
                 let since = outsideSince ?? input.time
@@ -144,7 +172,7 @@ public struct GazeDirector: Sendable {
                     outsideSince = nil
                 }
             }
-        } else if zone.contains(gaze) {
+        } else if zone.contains(gaze) && progress >= config.enterProgress {
             engaged = true
             nextMicroAt = input.time + Double.random(in: config.microShiftInterval, using: &rng)
             scheduleGlance(after: input.time, speaking: input.isSpeaking)

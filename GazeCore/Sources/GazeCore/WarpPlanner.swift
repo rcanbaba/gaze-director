@@ -29,12 +29,18 @@ public enum WarpPlanner {
 
     /// Moves each iris from where it is to its camera point plus the director's target, scaled by
     /// the director's weight and capped at `maxDisplacement` (uv) to keep the warp believable.
-    public static func plan(eyes: [EyeMeasurement], calibration: Calibration, output: DirectorOutput, maxDisplacement: Double) -> [EyeWarp] {
+    ///
+    /// Per-frame iris estimates jitter by about as much as a reading saccade, so by default the eyes
+    /// are assumed to sit at the calibrated reading centre and the correction is that fixed offset.
+    /// `follow` (0...1) blends in the measured deviation from that centre, to also cancel the
+    /// left-right sweep of reading at the cost of passing measurement noise into the warp.
+    public static func plan(eyes: [EyeMeasurement], calibration: Calibration, output: DirectorOutput, maxDisplacement: Double, follow: Double = 0) -> [EyeWarp] {
         guard output.weight > 0.001, eyes.count == calibration.cameraUV.count else { return [] }
         return zip(eyes, calibration.cameraUV).map { eye, cameraUV in
             let frame = eye.frame
-            let desired = cameraUV + output.target
-            let deltaUV = ((desired - eye.irisUV) * output.weight).clamped(maxLength: maxDisplacement)
+            let measured = eye.irisUV - cameraUV
+            let current = calibration.readingCenter.map { $0 + (measured - $0) * follow } ?? measured
+            let deltaUV = ((output.target - current) * output.weight).clamped(maxLength: maxDisplacement)
             return EyeWarp(
                 iris: frame.point(at: eye.irisUV),
                 displacement: frame.pixelVector(fromUV: deltaUV),

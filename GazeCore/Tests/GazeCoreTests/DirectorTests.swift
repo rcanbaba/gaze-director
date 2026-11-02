@@ -98,6 +98,32 @@ final class DirectorTests: XCTestCase {
         }
     }
 
+    func testReadingCentreKeepsCameraLookOutEvenInsideAWideZone() {
+        // A noisy calibration can produce a zone that also covers the camera point.
+        let wide = GazeRect(minX: -0.12, maxX: 0.02, minY: -0.05, maxY: 0.05)
+        let center = Vec2(-0.07, 0.01)
+        var director = GazeDirector(readingZone: wide, readingCenter: center, seed: 5)
+
+        let atCamera = run(&director, from: 0, seconds: 1) { _ in Vec2(0.005, 0) }
+        XCTAssertEqual(atCamera.last?.1.state, .passthrough)
+
+        let reading = run(&director, from: 1, seconds: 1) { _ in center }
+        XCTAssertNotEqual(reading.last?.1.state, .passthrough)
+
+        // Hysteresis: 45% of the way back to the camera keeps redirection on.
+        let between = run(&director, from: 2, seconds: 1) { _ in center * 0.55 }
+        XCTAssertNotEqual(between.last?.1.state, .passthrough)
+
+        let back = run(&director, from: 3, seconds: 1) { _ in Vec2(0.005, 0) }
+        XCTAssertEqual(back.last?.1.state, .passthrough)
+    }
+
+    func testReadingCentreAtTheCameraNeedsNoCorrection() {
+        var director = GazeDirector(readingZone: zone, readingCenter: Vec2(0.01, 0.005), seed: 6)
+        let out = run(&director, from: 0, seconds: 1) { _ in Vec2(0.01, 0.005) }
+        XCTAssertEqual(out.last?.1.state, .passthrough)
+    }
+
     func testSaccadesAreFast() {
         var transition = Transition(value: .zero)
         transition.retarget(Vec2(0.08, 0), at: 1.0, duration: 0.05)
@@ -160,5 +186,22 @@ final class CalibrationAndWarpTests: XCTestCase {
 
         let off = DirectorOutput(target: .zero, weight: 0, state: .passthrough)
         XCTAssertTrue(WarpPlanner.plan(eyes: eyes, calibration: calibration, output: off, maxDisplacement: 0.16).isEmpty)
+    }
+
+    func testWarpUsesFixedReadingOffsetSoIrisJitterDoesNotLeakIn() {
+        let calibration = Calibration(cameraUV: [Vec2(0, 0), Vec2(0, 0)], openness: 0.36, readingCenter: Vec2(-0.07, 0.02))
+        let full = DirectorOutput(target: .zero, weight: 1, state: .engaged)
+        let displacements = [Vec2(-0.05, 0.03), Vec2(-0.09, 0.01), Vec2(-0.07, 0.02)].map { iris in
+            WarpPlanner.plan(eyes: [measurement(irisUV: iris), measurement(irisUV: iris)], calibration: calibration, output: full, maxDisplacement: 0.16)[0].displacement
+        }
+        for d in displacements {
+            XCTAssertEqual(d.x, 3.5, accuracy: 1e-9)
+            XCTAssertEqual(d.y, -1.0, accuracy: 1e-9)
+        }
+
+        // Full follow tracks the measured iris instead.
+        let tracked = WarpPlanner.plan(eyes: [measurement(irisUV: Vec2(-0.05, 0.03)), measurement(irisUV: Vec2(-0.05, 0.03))], calibration: calibration, output: full, maxDisplacement: 0.16, follow: 1)
+        XCTAssertEqual(tracked[0].displacement.x, 2.5, accuracy: 1e-9)
+        XCTAssertEqual(tracked[0].displacement.y, -1.5, accuracy: 1e-9)
     }
 }

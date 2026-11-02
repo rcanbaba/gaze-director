@@ -29,6 +29,9 @@ struct ProcessingSettings: Equatable {
     var glancesEnabled = true
     /// Largest iris move in uv (fraction of eye width). Bigger moves look less natural.
     var maxCorrection = 0.16
+    /// 0 corrects by the fixed calibrated reading offset (steady); 1 follows the measured iris
+    /// every frame (cancels the reading sweep but jitters).
+    var followReading = 0.0
 }
 
 struct PipelineStats: Equatable {
@@ -51,8 +54,10 @@ struct DebugFrame {
     var imageSize: CGSize = .zero
     var eyes: [Eye] = []
     var gazeOffset: Vec2?
+    var smoothedGaze: Vec2?
     var target: Vec2?
     var readingZone: GazeRect?
+    var readingCenter: Vec2?
     var state = DirectorState.noFace
     var weight = 0.0
     var nextGlanceIn: Double?
@@ -109,6 +114,7 @@ final class Pipeline: @unchecked Sendable {
         record(eyes, from: pixelBuffer, at: time, calibration: calibration, saveDiagnostics: settings.saveDiagnostics)
 
         director.readingZone = calibration?.readingZone
+        director.readingCenter = calibration?.readingCenter
         director.config.glancesEnabled = settings.glancesEnabled
         let speaking = settings.talkMode == .microphone ? isSpeaking() : settings.talkMode == .speaking
         let gazeOffset = calibration.flatMap { cal in eyes.isEmpty ? nil : cal.gazeOffset(irisUV: eyes.map(\.irisUV)) }
@@ -122,7 +128,7 @@ final class Pipeline: @unchecked Sendable {
 
         var warps: [EyeWarp] = []
         if settings.effectEnabled, let calibration, recorder == nil {
-            warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection)
+            warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection, follow: settings.followReading)
         }
 
         let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
@@ -141,8 +147,10 @@ final class Pipeline: @unchecked Sendable {
         if settings.showOverlay {
             var frame = debugFrame(for: pixelBuffer, eyes: eyes, warps: warps)
             frame.gazeOffset = gazeOffset
+            frame.smoothedGaze = decision.smoothedGaze
             frame.target = decision.target
             frame.readingZone = calibration?.readingZone
+            frame.readingCenter = calibration?.readingCenter
             frame.state = decision.state
             frame.weight = decision.weight
             frame.nextGlanceIn = decision.nextGlanceIn

@@ -30,7 +30,15 @@ struct GazeMap: View {
             cross.addLine(to: CGPoint(x: c.x, y: c.y + 6))
             context.stroke(cross, with: .color(.white), lineWidth: 1)
 
-            if let gaze = frame.gazeOffset {
+            if let center = frame.readingCenter {
+                let p = map(center)
+                context.fill(Path(ellipseIn: CGRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)), with: .color(.blue))
+            }
+            if let raw = frame.gazeOffset {
+                let p = map(raw)
+                context.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)), with: .color(.gray))
+            }
+            if let gaze = frame.smoothedGaze {
                 let p = map(gaze)
                 context.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)), with: .color(.cyan))
             }

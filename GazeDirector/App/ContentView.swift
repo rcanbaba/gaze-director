@@ -61,6 +61,12 @@ struct ContentView: View {
                 LabeledContent("Max correction") {
                     Slider(value: $model.settings.maxCorrection, in: 0.04...0.25)
                 }
+                LabeledContent("Follow reading motion") {
+                    Slider(value: $model.settings.followReading, in: 0...1)
+                }
+                Text("0 = steady fixed correction. Higher also cancels the left-right reading sweep but passes tracking jitter into the eyes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Live") {
@@ -91,7 +97,8 @@ struct ContentView: View {
 
     private var calibrationStatus: String {
         guard let calibration = model.calibration else { return "Not calibrated" }
-        return calibration.readingZone == nil ? "Camera point only" : "Ready"
+        if calibration.readingZone == nil { return "Camera point only" }
+        return calibration.readingCenter == nil ? "Redo step 2" : "Ready"
     }
 }
 

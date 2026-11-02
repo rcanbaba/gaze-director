@@ -10,16 +10,18 @@ A macOS prototype that keeps your eyes on the camera while you read from the scr
 Camera (AVCaptureSession, BGRA)
   → Vision face landmarks: eye contours + rough pupil
   → Iris centre per eye: gradient-based locator (Timm & Barth) in an eye-aligned crop, One Euro smoothing
-  → Gaze director: is the real gaze inside the reading zone? Blinking? Head turned?
-       inside  → target = camera point + tiny fixation shifts + a glance away every 2–3.5 s
-       outside → let the real eyes through
-  → Metal warp: move each iris from where it is to its target, lids follow on vertical moves
+  → Gaze director: is the (low-passed) gaze reading, i.e. inside the zone and closer to the
+    reading centre than to the camera point? Blinking? Head turned?
+       reading → target = camera point + tiny fixation shifts + a glance away every 2–3.5 s
+       else    → let the real eyes through
+  → Metal warp: shift each iris by (target − calibrated reading offset), lids follow on vertical moves
   → Preview (later: virtual camera for Teams / Meet)
 ```
 
 - **No new pixels.** The warp moves your own pixels. The iris slides and the sclera compresses on one side and stretches on the other. Eye corners stay pinned. On vertical moves the upper lid follows the iris more than the lower lid does.
 - **Behaviour matters more than pixels.** Glance timing is randomised. Glances move as fast saccades (about 50 ms), not slow slides. You glance away more often while talking (2–3.5 s apart) than while listening (4–7 s apart). Blinks pass through. When you really look away or turn your head, the effect lets go.
-- **Calibrated to you.** You look at the camera lens once to record each iris's "eye contact" position. Then you read normally for 8 seconds, and the app learns the reading zone from where your eyes actually go.
+- **Calibrated to you.** You look at the camera lens once to record each iris's "eye contact" position. Then you read normally for 8 seconds, and the app learns the reading zone and the typical reading offset from where your eyes actually go.
+- **Steady, not twitchy.** On a real 1080p webcam, Vision gives only six contour points per eye and the per-frame iris estimate jitters by about ±2 px. That is as large as the whole reading offset. So the warp corrects by the fixed calibrated offset and leaves your own small eye movements alone. The *Follow reading motion* slider blends per-frame tracking back in if you want the left-right sweep cancelled too.
 
 ## Build and run
 
@@ -45,6 +47,9 @@ Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*)
 
 - `GazeCore/` is a Swift package with all the testable logic: eye geometry, iris locator, One Euro filter, calibration, the director and the warp planner. Run its tests with `cd GazeCore && swift test`.
 - `Tools/warp-preview.sh` renders a synthetic eye through the real shader and writes `Tools/out/warp-preview.png`.
+- Calibration saves raw frames and measurements to `~/Library/Application Support/GazeDirector/Diagnostics` (sidebar toggle, local only).
+  - `Tools/eye-probe.sh <frame.png>` draws the tracked contours and iris on a saved frame.
+  - `Tools/out/replay <camera-folder> <reading-folder>` (built like the other tools, from `Tools/Replay`) replays a calibration through the director and warp planner. It reports how often redirection is on and how much the warp jitters.
 
 ## Limitations
 
