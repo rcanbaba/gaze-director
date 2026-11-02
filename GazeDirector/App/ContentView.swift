@@ -66,6 +66,31 @@ struct ContentView: View {
 
     private var sidebar: some View {
         Form {
+            Section("Gifts") {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                    ForEach(Array(model.gifts.enumerated()), id: \.element.id) { index, gift in
+                        Button {
+                            model.playGift(at: index)
+                        } label: {
+                            VStack(spacing: 1) {
+                                Text(gift.name).lineLimit(1)
+                                if index < 9 {
+                                    Text("⌃⌥\(index + 1)").font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                HStack {
+                    Button("Open gifts folder") { model.openGiftsFolder() }
+                    Button("Reload") { model.reloadGifts() }
+                }
+                Text("⌃⌥1–9 work while Teams, Meet or FaceTime is in front. Add side-by-side alpha videos (colour left, mask right) to the gifts folder.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Test filter") {
                 HStack {
                     tintButton(.red, title: "Red", color: .red)

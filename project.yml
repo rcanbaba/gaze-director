@@ -19,6 +19,12 @@ targets:
     platform: macOS
     sources:
       - path: GazeDirector
+        excludes:
+          - Resources/Gifts
+      # Folder reference, so the demo gifts land in Contents/Resources/Gifts.
+      - path: GazeDirector/Resources/Gifts
+        type: folder
+        buildPhase: resources
       - path: GazeCamera/GazeCameraShared.swift
     dependencies:
       - package: GazeCore

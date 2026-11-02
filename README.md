@@ -56,6 +56,12 @@ Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*)
 3. Click **Install camera extension**, then approve it in System Settings → General → Login Items & Extensions → Camera Extensions.
 4. Pick **Gaze Director** as the camera in FaceTime, Photo Booth, Teams, Zoom or the browser. Keep the app open; it does the processing.
 
+## Gifts
+
+The sidebar plays gift animations over the outgoing video, so they show up in Photo Booth, FaceTime or a call. **⌃⌥1–9** trigger them while another app is in front. These are Carbon hot keys, so no Accessibility permission is needed.
+
+Gifts are side-by-side alpha videos: colour on the left half, the alpha mask as grey on the right half (the layout live-stream gift effects use). They are composited with Core Image, and the mask floor is cleaned so compression grey does not wash out the gift area. Four original demo gifts ship in `GazeDirector/Resources/Gifts`; `Tools/GiftMaker` renders them. Your own gifts go in `~/Movies/GazeDirector/Gifts` and are not part of the repo.
+
 ## Tools
 
 - `GazeCore/` is a Swift package with all the testable logic: eye geometry, iris locator, One Euro filter, calibration, the director and the warp planner. Run its tests with `cd GazeCore && swift test`.

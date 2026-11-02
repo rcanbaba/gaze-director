@@ -42,12 +42,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var cameraDenied = false
     @Published private(set) var microphoneDenied = false
     @Published private(set) var extensionStatus: String?
+    @Published private(set) var gifts: [GiftItem] = []
     @Published private(set) var virtualCameraConnected = false
 
     let display = VideoDisplay()
     let camera = CameraCapture()
     let voice = VoiceActivity()
     let extensionInstaller = CameraExtensionInstaller()
+    let hotKeys = GlobalHotKeys()
     let pipeline: Pipeline
 
     /// v3: calibrations are measured with the reflection-cleaned gradient locator by default; older
@@ -56,6 +58,9 @@ final class AppModel: ObservableObject {
 
     init() {
         pipeline = Pipeline(display: display)
+        hotKeys.onPress = { [weak self] index in
+            DispatchQueue.main.async { self?.playGift(at: index) }
+        }
         extensionInstaller.onStatus = { [weak self] status in
             DispatchQueue.main.async { self?.extensionStatus = status }
         }
@@ -97,6 +102,8 @@ final class AppModel: ObservableObject {
     }
 
     func start() async {
+        reloadGifts()
+        hotKeys.register()
         guard await AVCaptureDevice.requestAccess(for: .video) else {
             cameraDenied = true
             return
@@ -170,6 +177,22 @@ final class AppModel: ObservableObject {
         } else {
             UserDefaults.standard.removeObject(forKey: Self.calibrationKey)
         }
+    }
+
+    // MARK: Gifts
+
+    func reloadGifts() {
+        gifts = GiftItem.all()
+    }
+
+    func playGift(at index: Int) {
+        guard gifts.indices.contains(index) else { return }
+        pipeline.gift.set(GiftPlayback(gifts[index]))
+    }
+
+    func openGiftsFolder() {
+        try? FileManager.default.createDirectory(at: GiftItem.userFolder, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(GiftItem.userFolder)
     }
 
     // MARK: Virtual camera

@@ -84,6 +84,8 @@ final class Pipeline: @unchecked Sendable {
     let calibration = Locked<Calibration?>(nil)
     let pendingCalibration = Locked<CalibrationRecorder.Step?>(nil)
     let pendingClip = Locked(false)
+    /// The gift currently playing over the outgoing video, if any.
+    let gift = Locked<GiftPlayback?>(nil)
     var isSpeaking: () -> Bool = { false }
 
     var onStats: ((PipelineStats) -> Void)?
@@ -97,6 +99,7 @@ final class Pipeline: @unchecked Sendable {
     private let display: VideoDisplay
     private let warper = MetalWarper()
     private let tinter = ColorTinter()
+    private let giftCompositor = GiftCompositor()
     let virtualCamera = VirtualCameraOutput()
     private let exporter = FrameExporter()
     private lazy var diagnostics = DiagnosticsRecorder(exporter: exporter)
@@ -150,7 +153,7 @@ final class Pipeline: @unchecked Sendable {
         }
 
         let warped = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
-        let output = tinter.apply(settings.tint, to: warped)
+        let output = tinter.apply(settings.tint, to: overlayGift(on: warped))
         display.show(output)
         virtualCamera.send(output, time: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         recordClip(original: pixelBuffer, corrected: output, eyes: eyes, correcting: !warps.isEmpty && decision.weight > 0.5, time: time)
@@ -216,6 +219,16 @@ final class Pipeline: @unchecked Sendable {
             recorder = current
             onCalibrationProgress?(CalibrationProgress(step: current.step, progress: current.progress(at: time)))
         }
+    }
+
+    private func overlayGift(on frame: CVPixelBuffer) -> CVPixelBuffer {
+        guard let playback = gift.get() else { return frame }
+        if playback.isFinished {
+            gift.mutate { if $0 === playback { $0 = nil } }
+            return frame
+        }
+        guard let giftFrame = playback.frame(atHostTime: CACurrentMediaTime()) else { return frame }
+        return giftCompositor.composite(gift: giftFrame, over: frame)
     }
 
     private func recordClip(original: CVPixelBuffer, corrected: CVPixelBuffer, eyes: [EyeMeasurement], correcting: Bool, time: Double) {
