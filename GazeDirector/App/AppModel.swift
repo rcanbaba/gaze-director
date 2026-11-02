@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var calibrationMessage: String?
     @Published private(set) var stats = PipelineStats()
     @Published private(set) var debugFrame = DebugFrame()
+    @Published private(set) var eyeZoom = EyeZoom()
     @Published private(set) var cameraDenied = false
     @Published private(set) var microphoneDenied = false
 
@@ -49,6 +50,9 @@ final class AppModel: ObservableObject {
         }
         pipeline.onDebug = { [weak self] frame in
             DispatchQueue.main.async { self?.debugFrame = frame }
+        }
+        pipeline.onEyeZoom = { [weak self] zoom in
+            DispatchQueue.main.async { self?.eyeZoom = zoom }
         }
         pipeline.onCalibrationProgress = { [weak self] progress in
             DispatchQueue.main.async { self?.calibrationProgress = progress }

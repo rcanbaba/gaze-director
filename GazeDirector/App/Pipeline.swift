@@ -22,6 +22,9 @@ struct ProcessingSettings: Equatable {
     var effectEnabled = true
     var mirrored = true
     var showOverlay = true
+    var eyeZoom = true
+    /// Save raw frames and measurements during calibration (locally) for offline analysis.
+    var saveDiagnostics = true
     var talkMode = TalkMode.speaking
     var glancesEnabled = true
     /// Largest iris move in uv (fraction of eye width). Bigger moves look less natural.
@@ -70,15 +73,19 @@ final class Pipeline: @unchecked Sendable {
 
     var onStats: ((PipelineStats) -> Void)?
     var onDebug: ((DebugFrame) -> Void)?
+    var onEyeZoom: ((EyeZoom) -> Void)?
     var onCalibrationProgress: ((CalibrationProgress?) -> Void)?
     var onCalibrationFinished: ((CalibrationRecorder.Step, Calibration?) -> Void)?
 
     private let display: VideoDisplay
     private let warper = MetalWarper()
+    private let exporter = FrameExporter()
+    private lazy var diagnostics = DiagnosticsRecorder(exporter: exporter)
     private let faceTracker = FaceTracker()
     private var eyeTrackers = [EyeTracker(), EyeTracker()]
     private var director = GazeDirector()
     private var recorder: CalibrationRecorder?
+    private var frameCount = 0
 
     private var statsWindowStart = CACurrentMediaTime()
     private var statsFrames = 0
@@ -99,7 +106,7 @@ final class Pipeline: @unchecked Sendable {
         for i in eyeTrackers.indices { eyeTrackers[i].blinkThreshold = blinkThreshold }
         let (eyes, yaw) = measureEyes(in: pixelBuffer, time: time)
 
-        record(eyes, at: time, calibration: calibration)
+        record(eyes, from: pixelBuffer, at: time, calibration: calibration, saveDiagnostics: settings.saveDiagnostics)
 
         director.readingZone = calibration?.readingZone
         director.config.glancesEnabled = settings.glancesEnabled
@@ -120,6 +127,16 @@ final class Pipeline: @unchecked Sendable {
 
         let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
         display.show(output)
+
+        frameCount += 1
+        if settings.eyeZoom, eyes.count == 2, frameCount.isMultiple(of: 2) {
+            let regions = eyes.map { FrameExporter.eyeRegion($0.frame) }
+            onEyeZoom?(EyeZoom(
+                original: regions.compactMap { exporter.image(of: pixelBuffer, rect: $0) },
+                corrected: regions.compactMap { exporter.image(of: output, rect: $0) },
+                warped: !warps.isEmpty
+            ))
+        }
 
         if settings.showOverlay {
             var frame = debugFrame(for: pixelBuffer, eyes: eyes, warps: warps)
@@ -149,18 +166,21 @@ final class Pipeline: @unchecked Sendable {
         return (eyes.count == 2 ? eyes : [], face.yaw)
     }
 
-    private func record(_ eyes: [EyeMeasurement], at time: Double, calibration: Calibration?) {
+    private func record(_ eyes: [EyeMeasurement], from pixelBuffer: CVPixelBuffer, at time: Double, calibration: Calibration?, saveDiagnostics: Bool) {
         if let step = pendingCalibration.mutate({ value -> CalibrationRecorder.Step? in
             defer { value = nil }
             return value
         }) {
             recorder = CalibrationRecorder(step: step, startTime: time)
+            if saveDiagnostics { diagnostics.begin(step: step.rawValue) }
         }
         guard var current = recorder else { return }
 
         current.add(eyes, at: time, base: calibration)
+        diagnostics.record(pixelBuffer, time: time, eyes: eyes)
         if current.isFinished(at: time) {
             recorder = nil
+            diagnostics.end()
             onCalibrationProgress?(nil)
             onCalibrationFinished?(current.step, current.result(base: calibration))
         } else {

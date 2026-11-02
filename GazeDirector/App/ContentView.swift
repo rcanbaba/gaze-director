@@ -19,6 +19,11 @@ struct ContentView: View {
                 if let progress = model.calibrationProgress {
                     CalibrationPrompt(progress: progress)
                 }
+                if model.settings.eyeZoom, !model.eyeZoom.original.isEmpty {
+                    EyeZoomPanel(zoom: model.eyeZoom, mirrored: model.settings.mirrored)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                }
             }
             Divider()
             sidebar
@@ -40,6 +45,8 @@ struct ContentView: View {
                 if model.calibration != nil {
                     Button("Reset calibration", role: .destructive) { model.resetCalibration() }
                 }
+                Toggle("Save calibration frames (local, for debugging)", isOn: $model.settings.saveDiagnostics)
+                Button("Show saved frames in Finder") { DiagnosticsRecorder.revealInFinder() }
             }
 
             Section("Behaviour") {
@@ -73,6 +80,7 @@ struct ContentView: View {
                 }
                 Toggle("Mirror preview", isOn: $model.settings.mirrored)
                 Toggle("Debug overlay", isOn: $model.settings.showOverlay)
+                Toggle("Eye zoom", isOn: $model.settings.eyeZoom)
                 LabeledContent("FPS", value: model.stats.fps.formatted(.number.precision(.fractionLength(1))))
                 LabeledContent("Processing", value: "\(model.stats.processingMs.formatted(.number.precision(.fractionLength(2)))) ms")
                 LabeledContent("Frame", value: "\(Int(model.stats.frameSize.width))×\(Int(model.stats.frameSize.height))")

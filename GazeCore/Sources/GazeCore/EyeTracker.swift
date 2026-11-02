@@ -40,7 +40,7 @@ public struct EyeTracker: Sendable {
         let crop = layout.crop(frame, luma: luma)
         var refinedUV: Vec2?
         if let p = IrisLocator.locate(in: crop.image, mask: crop.mask) {
-            let uv = layout.uv(x: p.x - 0.5, y: p.y - 0.5)
+            let uv = layout.uv(x: p.x, y: p.y)
             let plausible = abs(uv.x) < 0.45 && abs(uv.y) < 0.25
             let agrees = visionUV.map { (uv - $0).length < 0.2 } ?? true
             if plausible && agrees { refinedUV = uv }
