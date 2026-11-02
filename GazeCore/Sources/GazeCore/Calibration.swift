@@ -30,12 +30,27 @@ public struct Calibration: Codable, Equatable, Sendable {
     /// Typical gaze offset while reading (median). The warp corrects by this fixed amount, which is
     /// far steadier than following the per-frame iris estimate.
     public var readingCenter: Vec2?
+    /// Median eye openness while reading minus while looking at the camera. Positive means the eyes
+    /// open wider when reading, i.e. the reading spot is higher than the lens.
+    public var readingOpennessChange: Double?
 
-    public init(cameraUV: [Vec2], openness: Double, readingZone: GazeRect? = nil, readingCenter: Vec2? = nil) {
+    public init(cameraUV: [Vec2], openness: Double, readingZone: GazeRect? = nil, readingCenter: Vec2? = nil, readingOpennessChange: Double? = nil) {
         self.cameraUV = cameraUV
         self.openness = openness
         self.readingZone = readingZone
         self.readingCenter = readingCenter
+        self.readingOpennessChange = readingOpennessChange
+    }
+
+    /// The fixed offset the warp undoes while reading.
+    ///
+    /// Horizontal comes from the pupil. Vision's pupil barely moves vertically, but the upper lid
+    /// follows vertical gaze closely, so the vertical part comes from how much wider (looking up) or
+    /// narrower (looking down) the eye opens while reading, when that is the larger signal.
+    public var readingOffset: Vec2? {
+        guard let center = readingCenter else { return nil }
+        guard let change = readingOpennessChange, abs(change) > abs(center.y) else { return center }
+        return Vec2(center.x, -change)
     }
 
     /// Mean offset of both irises from their camera positions.
@@ -65,6 +80,7 @@ public struct CalibrationRecorder: Sendable {
     public var zoneMargin = 0.02
 
     private var irisSamples: [[Vec2]] = [[], []]
+    /// Mean of both eyes' openness, in either step.
     private var opennessSamples: [Double] = []
     private var offsetSamples: [Vec2] = []
 
@@ -91,6 +107,7 @@ public struct CalibrationRecorder: Sendable {
         case .reading:
             guard let base else { return }
             offsetSamples.append(base.gazeOffset(irisUV: eyes.map(\.irisUV)))
+            opennessSamples.append(eyes.map(\.frame.openness).reduce(0, +) / 2)
         }
     }
 
@@ -114,6 +131,7 @@ public struct CalibrationRecorder: Sendable {
                 maxY: percentile(ys, 0.95) + zoneMargin
             )
             calibration.readingCenter = Vec2(percentile(xs, 0.5), percentile(ys, 0.5))
+            calibration.readingOpennessChange = percentile(opennessSamples, 0.5) - calibration.openness
             return calibration
         }
     }

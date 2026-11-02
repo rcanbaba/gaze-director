@@ -1,61 +1,23 @@
 // Replays saved calibration diagnostics through calibration, the director and the warp planner,
 // to check decisions on real measurements without the camera.
 //
-// Usage: replay <camera-step folder> <reading-step folder>
+// Usage: replay [--vision] <camera-step folder> <reading-step folder>
 //   Prints how often redirection is on while looking at the camera (should be ~0%) and while
 //   reading (should be ~100%), and how much the warp displacement jitters.
 
 import Foundation
 import GazeCore
 
-struct EyeRecord: Decodable {
-    var contour: [Vec2]
-    var rawIrisUV: Vec2
-    var irisUV: Vec2
-    var visionPupilUV: Vec2?
-    var refined: Bool
-    var blinking: Bool
-}
-
-struct FrameRecord: Decodable {
-    var time: Double
-    var eyes: [EyeRecord]
-}
-
-/// `--vision` replays with Vision's pupil point as the iris estimate instead of the gradient locator.
+/// `--vision` replays with Vision's pupil point as the iris estimate instead of the logged one.
 let useVisionPupil = CommandLine.arguments.contains("--vision")
-
-func load(_ folder: String) -> [(Double, [EyeMeasurement])] {
-    let url = URL(fileURLWithPath: folder).appendingPathComponent("measurements.jsonl")
-    guard let text = try? String(contentsOf: url, encoding: .utf8) else {
-        print("cannot read \(url.path)")
-        exit(1)
-    }
-    return text.split(separator: "\n").compactMap { line in
-        guard let record = try? JSONDecoder().decode(FrameRecord.self, from: Data(line.utf8)) else { return nil }
-        let eyes = record.eyes.compactMap { e -> EyeMeasurement? in
-            guard let frame = EyeFrame(contour: e.contour) else { return nil }
-            let iris = useVisionPupil ? (e.visionPupilUV ?? e.irisUV) : e.irisUV
-            return EyeMeasurement(frame: frame, irisUV: iris, rawIrisUV: e.rawIrisUV, visionPupilUV: e.visionPupilUV, refined: e.refined, isBlinking: e.blinking)
-        }
-        return (record.time, eyes.count == 2 ? eyes : [])
-    }
-}
 
 let arguments = CommandLine.arguments.filter { $0 != "--vision" }
 guard arguments.count == 3 else {
     print("usage: replay [--vision] <camera-step folder> <reading-step folder>")
     exit(2)
 }
-let cameraFrames = load(arguments[1])
-let readingFrames = load(arguments[2])
-
-func calibrate(_ step: CalibrationRecorder.Step, _ frames: [(Double, [EyeMeasurement])], base: Calibration?) -> Calibration? {
-    guard let start = frames.first?.0 else { return nil }
-    var recorder = CalibrationRecorder(step: step, startTime: start)
-    for (t, eyes) in frames { recorder.add(eyes, at: t, base: base) }
-    return recorder.result(base: base)
-}
+let cameraFrames = loadDiagnostics(arguments[1], useVisionPupil: useVisionPupil)
+let readingFrames = loadDiagnostics(arguments[2], useVisionPupil: useVisionPupil)
 
 guard let cameraCalibration = calibrate(.camera, cameraFrames, base: nil),
       let calibration = calibrate(.reading, readingFrames, base: cameraCalibration),

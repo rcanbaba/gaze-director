@@ -67,6 +67,14 @@ public struct DirectorOutput: Sendable {
     public var nextGlanceIn: Double?
     /// The low-passed gaze offset the engagement decision was made on.
     public var smoothedGaze: Vec2?
+
+    public init(target: Vec2, weight: Double, state: DirectorState, nextGlanceIn: Double? = nil, smoothedGaze: Vec2? = nil) {
+        self.target = target
+        self.weight = weight
+        self.state = state
+        self.nextGlanceIn = nextGlanceIn
+        self.smoothedGaze = smoothedGaze
+    }
 }
 
 /// Decides, frame by frame, where the eyes should appear to look.

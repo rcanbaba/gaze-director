@@ -188,6 +188,23 @@ final class CalibrationAndWarpTests: XCTestCase {
         XCTAssertTrue(WarpPlanner.plan(eyes: eyes, calibration: calibration, output: off, maxDisplacement: 0.16).isEmpty)
     }
 
+    func testVerticalOffsetComesFromEyeOpeningWhenThatIsTheLargerSignal() throws {
+        // Eyes open 0.06 wider while reading: the reading spot is above the lens.
+        var calibration = Calibration(cameraUV: [.zero, .zero], openness: 0.29, readingCenter: Vec2(-0.05, -0.03), readingOpennessChange: 0.06)
+        let offset = try XCTUnwrap(calibration.readingOffset)
+        XCTAssertEqual(offset.x, -0.05, accuracy: 1e-12)
+        XCTAssertEqual(offset.y, -0.06, accuracy: 1e-12)
+
+        calibration.readingOpennessChange = 0.01
+        XCTAssertEqual(try XCTUnwrap(calibration.readingOffset).y, -0.03, accuracy: 1e-12)
+
+        let full = DirectorOutput(target: .zero, weight: 1, state: .engaged)
+        calibration.readingOpennessChange = 0.06
+        let warps = WarpPlanner.plan(eyes: [measurement(irisUV: .zero), measurement(irisUV: .zero)], calibration: calibration, output: full, maxDisplacement: 0.5, strength: 2)
+        XCTAssertEqual(warps[0].displacement.x, 5, accuracy: 1e-9)
+        XCTAssertEqual(warps[0].displacement.y, 6, accuracy: 1e-9)
+    }
+
     func testWarpUsesFixedReadingOffsetSoIrisJitterDoesNotLeakIn() {
         let calibration = Calibration(cameraUV: [Vec2(0, 0), Vec2(0, 0)], openness: 0.36, readingCenter: Vec2(-0.07, 0.02))
         let full = DirectorOutput(target: .zero, weight: 1, state: .engaged)

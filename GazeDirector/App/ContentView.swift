@@ -62,6 +62,9 @@ struct ContentView: View {
                     Text("Gradient locator (experimental)").tag(IrisSource.gradient)
                 }
                 Toggle("Glance away now and then", isOn: $model.settings.glancesEnabled)
+                LabeledContent("Strength \(model.settings.correctionStrength.formatted(.number.precision(.fractionLength(1))))×") {
+                    Slider(value: $model.settings.correctionStrength, in: 0.5...2.5)
+                }
                 LabeledContent("Max correction") {
                     Slider(value: $model.settings.maxCorrection, in: 0.04...0.25)
                 }
@@ -102,7 +105,7 @@ struct ContentView: View {
     private var calibrationStatus: String {
         guard let calibration = model.calibration else { return "Not calibrated" }
         if calibration.readingZone == nil { return "Camera point only" }
-        return calibration.readingCenter == nil ? "Redo step 2" : "Ready"
+        return calibration.readingCenter == nil || calibration.readingOpennessChange == nil ? "Redo step 2" : "Ready"
     }
 }
 

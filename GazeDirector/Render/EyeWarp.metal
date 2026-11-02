@@ -34,16 +34,18 @@ static float2 displacementAt(float2 p, constant EyeWarp *eyes, uint count) {
         float qx = dot(q, ax);
         float qy = dot(q, ay);
 
-        // The iris and the sclera around it move; lids and corners stay put for sideways moves,
-        // so the sclera compresses on one side and stretches on the other instead of tearing.
-        float s = e.irisRadius * 1.2;
-        float irisWeight = exp(-(qx * qx + qy * qy) / (2.0 * s * s)) * openingMask(p, e, float2(1.0, 1.2));
+        // The whole iris shifts rigidly and the band around it (sclera, lid edges) stretches, so
+        // nothing tears. Vision's six-point eye contour is too coarse to clip by: on real faces it
+        // cuts through the iris, which held real moves to ~40% of the planned shift. So the weight
+        // follows the iris itself and the contour only pins the eye corners. Shifting the lids
+        // sideways along with it is barely visible, since lid lines run sideways anyway.
+        float cornerPin = 1.0 - smoothstep(0.75, 1.05, fabs(dot(p - e.center, ax)) / e.halfSize.x);
+        float irisWeight = (1.0 - smoothstep(1.0, 2.6, length(q) / e.irisRadius)) * cornerPin;
 
         // Looking up or down moves the lids too: the upper lid follows the iris closely, the lower
         // lid less, and the eye corners stay pinned so the eye itself does not slide on the face.
         float sx = e.halfSize.x * 0.8;
         float sy = e.halfSize.y * 2.0 + e.irisRadius;
-        float cornerPin = 1.0 - smoothstep(0.55, 1.0, fabs(dot(p - e.center, ax)) / e.halfSize.x);
         float upper = 1.0 - smoothstep(-0.5, 0.5, qy / e.irisRadius);
         float lidShare = mix(0.3, 0.75, upper);
         float lidWeight = lidShare * cornerPin

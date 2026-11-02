@@ -34,6 +34,9 @@ struct ProcessingSettings: Equatable {
     /// 0 corrects by the fixed calibrated reading offset (steady); 1 follows the measured iris
     /// every frame (cancels the reading sweep but jitters).
     var followReading = 0.0
+    /// Scales the calibrated reading offset. Landmark-based estimates under-read it; 1.4 matched a
+    /// camera-look frame best in a recorded session.
+    var correctionStrength = 1.4
 }
 
 struct PipelineStats: Equatable {
@@ -133,7 +136,7 @@ final class Pipeline: @unchecked Sendable {
 
         var warps: [EyeWarp] = []
         if settings.effectEnabled, let calibration, recorder == nil {
-            warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection, follow: settings.followReading)
+            warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection, follow: settings.followReading, strength: settings.correctionStrength)
         }
 
         let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
