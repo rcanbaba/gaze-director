@@ -2,10 +2,30 @@ import AVFoundation
 import GazeCore
 import QuartzCore
 
+enum TalkMode: String, CaseIterable, Identifiable {
+    case speaking
+    case listening
+    case microphone
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .speaking: "I'm talking"
+        case .listening: "I'm listening"
+        case .microphone: "Detect with microphone"
+        }
+    }
+}
+
 struct ProcessingSettings: Equatable {
     var effectEnabled = true
     var mirrored = true
     var showOverlay = true
+    var talkMode = TalkMode.speaking
+    var glancesEnabled = true
+    /// Largest iris move in uv (fraction of eye width). Bigger moves look less natural.
+    var maxCorrection = 0.16
 }
 
 struct PipelineStats: Equatable {
@@ -14,29 +34,50 @@ struct PipelineStats: Equatable {
     var frameSize: CGSize = .zero
 }
 
-/// Per-frame tracking state for the debug overlay, in image pixels (top-left origin).
+/// Per-frame state for the debug overlay and gaze map. Image positions are pixels, top-left origin.
 struct DebugFrame {
     struct Eye {
         var contour: [CGPoint]
         var iris: CGPoint
         var visionPupil: CGPoint?
+        var target: CGPoint?
         var refined: Bool
         var blinking: Bool
     }
 
     var imageSize: CGSize = .zero
     var eyes: [Eye] = []
+    var gazeOffset: Vec2?
+    var target: Vec2?
+    var readingZone: GazeRect?
+    var state = DirectorState.noFace
+    var weight = 0.0
+    var nextGlanceIn: Double?
+    var isSpeaking = false
+}
+
+struct CalibrationProgress: Equatable {
+    var step: CalibrationRecorder.Step
+    var progress: Double
 }
 
 /// Runs on the camera frame queue: tracks the eyes, decides where they should look, warps, displays.
 final class Pipeline: @unchecked Sendable {
     let settings = Locked(ProcessingSettings())
+    let calibration = Locked<Calibration?>(nil)
+    let pendingCalibration = Locked<CalibrationRecorder.Step?>(nil)
+    var isSpeaking: () -> Bool = { false }
+
     var onStats: ((PipelineStats) -> Void)?
     var onDebug: ((DebugFrame) -> Void)?
+    var onCalibrationProgress: ((CalibrationProgress?) -> Void)?
+    var onCalibrationFinished: ((CalibrationRecorder.Step, Calibration?) -> Void)?
 
     private let display: VideoDisplay
     private let faceTracker = FaceTracker()
     private var eyeTrackers = [EyeTracker(), EyeTracker()]
+    private var director = GazeDirector()
+    private var recorder: CalibrationRecorder?
 
     private var statsWindowStart = CACurrentMediaTime()
     private var statsFrames = 0
@@ -50,40 +91,92 @@ final class Pipeline: @unchecked Sendable {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let start = CACurrentMediaTime()
         let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        let settings = settings.get()
+        let calibration = calibration.get()
 
-        let eyes = measureEyes(in: pixelBuffer, time: time)
+        let blinkThreshold = calibration?.blinkThreshold ?? 0.17
+        for i in eyeTrackers.indices { eyeTrackers[i].blinkThreshold = blinkThreshold }
+        let (eyes, yaw) = measureEyes(in: pixelBuffer, time: time)
+
+        record(eyes, at: time, calibration: calibration)
+
+        director.readingZone = calibration?.readingZone
+        director.config.glancesEnabled = settings.glancesEnabled
+        let speaking = settings.talkMode == .microphone ? isSpeaking() : settings.talkMode == .speaking
+        let gazeOffset = calibration.flatMap { cal in eyes.isEmpty ? nil : cal.gazeOffset(irisUV: eyes.map(\.irisUV)) }
+        let decision = director.update(DirectorInput(
+            time: time,
+            gazeOffset: gazeOffset,
+            isBlinking: eyes.contains(where: \.isBlinking),
+            isSpeaking: speaking,
+            headYaw: yaw
+        ))
+
+        var warps: [EyeWarp] = []
+        if settings.effectEnabled, let calibration, recorder == nil {
+            warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection)
+        }
 
         display.show(pixelBuffer)
 
-        if settings.get().showOverlay {
-            onDebug?(debugFrame(for: pixelBuffer, eyes: eyes))
+        if settings.showOverlay {
+            var frame = debugFrame(for: pixelBuffer, eyes: eyes, warps: warps)
+            frame.gazeOffset = gazeOffset
+            frame.target = decision.target
+            frame.readingZone = calibration?.readingZone
+            frame.state = decision.state
+            frame.weight = decision.weight
+            frame.nextGlanceIn = decision.nextGlanceIn
+            frame.isSpeaking = speaking
+            onDebug?(frame)
         }
         recordStats(processing: CACurrentMediaTime() - start, pixelBuffer: pixelBuffer)
     }
 
-    /// Returns both eyes, or an empty array when the face or either eye is lost.
-    private func measureEyes(in pixelBuffer: CVPixelBuffer, time: Double) -> [EyeMeasurement] {
+    /// Returns both eyes (or none when the face or either eye is lost) and the head yaw.
+    private func measureEyes(in pixelBuffer: CVPixelBuffer, time: Double) -> ([EyeMeasurement], Double?) {
         guard let face = faceTracker.detect(in: pixelBuffer) else {
             eyeTrackers.indices.forEach { eyeTrackers[$0].reset() }
-            return []
+            return ([], nil)
         }
         let eyes = LumaSampler.withSampler(pixelBuffer) { luma in
             (0..<2).compactMap { i in
                 eyeTrackers[i].update(contour: face.eyes[i].contour, pupil: face.eyes[i].pupil, time: time) { luma($0) }
             }
         } ?? []
-        return eyes.count == 2 ? eyes : []
+        return (eyes.count == 2 ? eyes : [], face.yaw)
     }
 
-    private func debugFrame(for pixelBuffer: CVPixelBuffer, eyes: [EyeMeasurement]) -> DebugFrame {
+    private func record(_ eyes: [EyeMeasurement], at time: Double, calibration: Calibration?) {
+        if let step = pendingCalibration.mutate({ value -> CalibrationRecorder.Step? in
+            defer { value = nil }
+            return value
+        }) {
+            recorder = CalibrationRecorder(step: step, startTime: time)
+        }
+        guard var current = recorder else { return }
+
+        current.add(eyes, at: time, base: calibration)
+        if current.isFinished(at: time) {
+            recorder = nil
+            onCalibrationProgress?(nil)
+            onCalibrationFinished?(current.step, current.result(base: calibration))
+        } else {
+            recorder = current
+            onCalibrationProgress?(CalibrationProgress(step: current.step, progress: current.progress(at: time)))
+        }
+    }
+
+    private func debugFrame(for pixelBuffer: CVPixelBuffer, eyes: [EyeMeasurement], warps: [EyeWarp]) -> DebugFrame {
         func cg(_ v: Vec2) -> CGPoint { CGPoint(x: v.x, y: v.y) }
         return DebugFrame(
             imageSize: CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer)),
-            eyes: eyes.map { eye in
+            eyes: eyes.enumerated().map { i, eye in
                 DebugFrame.Eye(
                     contour: eye.frame.contour.map(cg),
                     iris: cg(eye.frame.point(at: eye.irisUV)),
                     visionPupil: eye.visionPupilUV.map { cg(eye.frame.point(at: $0)) },
+                    target: warps.indices.contains(i) ? cg(warps[i].iris + warps[i].displacement) : nil,
                     refined: eye.refined,
                     blinking: eye.isBlinking
                 )

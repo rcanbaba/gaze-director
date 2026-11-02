@@ -1,4 +1,5 @@
 import AVFoundation
+import GazeCore
 import SwiftUI
 
 @MainActor
@@ -15,27 +16,56 @@ final class AppModel: ObservableObject {
         }
     }
     @Published var settings = ProcessingSettings() {
-        didSet { pipeline.settings.set(settings) }
+        didSet {
+            pipeline.settings.set(settings)
+            if settings.talkMode != oldValue.talkMode { updateMicrophone() }
+        }
     }
+    @Published private(set) var calibration: Calibration? {
+        didSet {
+            pipeline.calibration.set(calibration)
+            saveCalibration()
+        }
+    }
+    @Published private(set) var calibrationProgress: CalibrationProgress?
+    @Published private(set) var calibrationMessage: String?
     @Published private(set) var stats = PipelineStats()
     @Published private(set) var debugFrame = DebugFrame()
     @Published private(set) var cameraDenied = false
+    @Published private(set) var microphoneDenied = false
 
     let display = VideoDisplay()
     let camera = CameraCapture()
+    let voice = VoiceActivity()
     let pipeline: Pipeline
+
+    private static let calibrationKey = "calibration.v1"
 
     init() {
         pipeline = Pipeline(display: display)
+        pipeline.isSpeaking = { [voice] in voice.isSpeaking }
         pipeline.onStats = { [weak self] stats in
             DispatchQueue.main.async { self?.stats = stats }
         }
         pipeline.onDebug = { [weak self] frame in
             DispatchQueue.main.async { self?.debugFrame = frame }
         }
+        pipeline.onCalibrationProgress = { [weak self] progress in
+            DispatchQueue.main.async { self?.calibrationProgress = progress }
+        }
+        pipeline.onCalibrationFinished = { [weak self] step, result in
+            DispatchQueue.main.async { self?.finishCalibration(step: step, result: result) }
+        }
         camera.onFrame = { [pipeline] sampleBuffer in
             pipeline.process(sampleBuffer)
         }
+
+        if let data = UserDefaults.standard.data(forKey: Self.calibrationKey),
+           let saved = try? JSONDecoder().decode(Calibration.self, from: data) {
+            calibration = saved
+            pipeline.calibration.set(saved)
+        }
+        pipeline.settings.set(settings)
     }
 
     func start() async {
@@ -48,5 +78,62 @@ final class AppModel: ObservableObject {
         let preferred = AVCaptureDevice.default(for: .video)?.uniqueID
         selectedCameraID = selectedCameraID ?? cameras.first(where: { $0.id == preferred })?.id ?? cameras.first?.id
         camera.start()
+    }
+
+    // MARK: Calibration
+
+    var canCalibrateReading: Bool { calibration != nil }
+
+    func calibrate(_ step: CalibrationRecorder.Step) {
+        calibrationMessage = nil
+        calibrationProgress = CalibrationProgress(step: step, progress: 0)
+        pipeline.pendingCalibration.set(step)
+    }
+
+    func resetCalibration() {
+        calibration = nil
+        calibrationMessage = nil
+    }
+
+    private func finishCalibration(step: CalibrationRecorder.Step, result: Calibration?) {
+        calibrationProgress = nil
+        guard let result else {
+            calibrationMessage = "Not enough clear frames. Keep your face in view and try again."
+            return
+        }
+        calibration = result
+        calibrationMessage = switch step {
+        case .camera: "Camera point saved. Now read some text for step 2."
+        case .reading: "Reading zone saved. Redirection is active while you read."
+        }
+    }
+
+    private func saveCalibration() {
+        if let calibration, let data = try? JSONEncoder().encode(calibration) {
+            UserDefaults.standard.set(data, forKey: Self.calibrationKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.calibrationKey)
+        }
+    }
+
+    // MARK: Microphone
+
+    private func updateMicrophone() {
+        guard settings.talkMode == .microphone else {
+            voice.stop()
+            return
+        }
+        Task {
+            guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                microphoneDenied = true
+                return
+            }
+            microphoneDenied = false
+            do {
+                try voice.start()
+            } catch {
+                microphoneDenied = true
+            }
+        }
     }
 }

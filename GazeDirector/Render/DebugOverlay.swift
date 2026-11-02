@@ -30,6 +30,15 @@ struct DebugOverlay: View {
                     dot(pupil, .yellow.opacity(0.8), radius: 2)
                 }
                 dot(eye.iris, eye.refined ? .cyan : .red, radius: 3)
+
+                if let target = eye.target {
+                    var line = Path()
+                    line.move(to: map(eye.iris))
+                    line.addLine(to: map(target))
+                    context.stroke(line, with: .color(.pink), lineWidth: 1)
+                    let c = map(target)
+                    context.stroke(Path(ellipseIn: CGRect(x: c.x - 4, y: c.y - 4, width: 8, height: 8)), with: .color(.pink), lineWidth: 1.5)
+                }
             }
         }
         .allowsHitTesting(false)
