@@ -2,11 +2,11 @@ import Foundation
 
 /// Where the per-frame iris estimate comes from.
 public enum IrisSource: String, CaseIterable, Sendable {
-    /// Vision's pupil landmark. Steady and consistent horizontally on real webcams, but it barely
-    /// moves vertically with gaze.
+    /// Vision's pupil landmark. Very steady, but its face-shape prior under-reads eye rotation:
+    /// on recorded sessions it saw a third to two thirds of the reading shift.
     case vision
-    /// Gradient-based locator. Responds to vertical gaze, but screen reflections on dark irises can
-    /// make it jump between two positions.
+    /// Gradient-based locator on a reflection-cleaned crop. Measures the full shift, consistent
+    /// between both eyes, with a few hundredths of an eye width of jitter.
     case gradient
 }
 
@@ -39,7 +39,7 @@ public struct EyeMeasurement: Sendable {
 public struct EyeTracker: Sendable {
     /// Openness (height / width) below which the eye counts as closed.
     public var blinkThreshold: Double = 0.17
-    public var source = IrisSource.vision
+    public var source = IrisSource.gradient
     public var layout = EyeCropLayout()
 
     private var filter = OneEuroFilter2D()

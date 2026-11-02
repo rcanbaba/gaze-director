@@ -57,7 +57,12 @@ public struct EyeCropLayout: Sendable {
 /// weighted by how dark the candidate is. Only outward-pointing gradients count, which ignores lid edges.
 public enum IrisLocator {
     /// Returns the iris centre in crop pixel coordinates, or nil when the crop holds no usable signal.
-    public static func locate(in image: GrayImage, mask: [Bool]) -> Vec2? {
+    ///
+    /// - Parameter highlightRadius: bright spots up to about twice this size (in cells) are removed
+    ///   first. A screen reflection inside a dark pupil otherwise makes the true centre look bright
+    ///   and adds gradients of its own, and the result jumps between two places. 0 turns it off.
+    public static func locate(in source: GrayImage, mask: [Bool], highlightRadius: Int = 3) -> Vec2? {
+        let image = highlightRadius > 0 ? removeHighlights(source, radius: highlightRadius) : source
         let w = image.width, h = image.height
         guard w >= 5, h >= 5, mask.count == w * h else { return nil }
 
@@ -116,6 +121,29 @@ public enum IrisLocator {
         let ox = parabolic(s(bx - 1, by), best.score, s(bx + 1, by))
         let oy = parabolic(s(bx, by - 1), best.score, s(bx, by + 1))
         return Vec2(Double(bx) + ox, Double(by) + oy)
+    }
+
+    /// Grayscale opening (min filter, then max filter over a square window): bright spots smaller
+    /// than the window vanish, while larger bright areas such as the sclera keep their shape.
+    static func removeHighlights(_ image: GrayImage, radius: Int) -> GrayImage {
+        let eroded = rankFilter(rankFilter(image, radius: radius, horizontal: true, pick: min), radius: radius, horizontal: false, pick: min)
+        return rankFilter(rankFilter(eroded, radius: radius, horizontal: true, pick: max), radius: radius, horizontal: false, pick: max)
+    }
+
+    private static func rankFilter(_ image: GrayImage, radius: Int, horizontal: Bool, pick: (Float, Float) -> Float) -> GrayImage {
+        let w = image.width, h = image.height
+        var out = image.pixels
+        for y in 0..<h {
+            for x in 0..<w {
+                var value = image[x, y]
+                for d in -radius...radius where d != 0 {
+                    let sx = horizontal ? x + d : x, sy = horizontal ? y : y + d
+                    if sx >= 0, sx < w, sy >= 0, sy < h { value = pick(value, image[sx, sy]) }
+                }
+                out[y * w + x] = value
+            }
+        }
+        return GrayImage(width: w, height: h, pixels: out)
     }
 
     private static func boxBlur(_ image: GrayImage) -> GrayImage {

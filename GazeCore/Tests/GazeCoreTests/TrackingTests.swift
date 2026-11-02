@@ -59,6 +59,19 @@ final class TrackingTests: XCTestCase {
         }
     }
 
+    func testIrisLocatorIgnoresReflectionInThePupil() throws {
+        let truth = Vec2(22, 12)
+        let (clean, mask) = syntheticCrop(iris: truth, radius: 7)
+        var image = clean
+        // A bright 3×3 screen reflection just off the centre, as on dark irises close to a display.
+        for y in 10...12 { for x in 24...26 { image.pixels[y * image.width + x] = 0.95 } }
+
+        let cleaned = try XCTUnwrap(IrisLocator.locate(in: image, mask: mask))
+        XCTAssertLessThan((cleaned - truth).length, 1.0, "got \(cleaned)")
+        let unfiltered = try XCTUnwrap(IrisLocator.locate(in: image, mask: mask, highlightRadius: 0))
+        XCTAssertGreaterThan((unfiltered - truth).length, (cleaned - truth).length)
+    }
+
     func testIrisLocatorRejectsFlatCrop() {
         let image = GrayImage(width: 48, height: 24, pixels: .init(repeating: 0.5, count: 48 * 24))
         XCTAssertNil(IrisLocator.locate(in: image, mask: .init(repeating: true, count: 48 * 24)))
@@ -88,6 +101,7 @@ final class TrackingTests: XCTestCase {
         let luma: (Vec2) -> Float = { p in (p - disk).length < 10 ? 0.15 : 0.85 }
 
         var vision = EyeTracker()
+        vision.source = .vision
         let fromVision = try XCTUnwrap(vision.update(contour: contour, pupil: hint, time: 0, luma: luma))
         XCTAssertEqual(fromVision.rawIrisUV.x, 0.1, accuracy: 1e-9)
         XCTAssertFalse(fromVision.refined)

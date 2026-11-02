@@ -27,17 +27,18 @@ struct ProcessingSettings: Equatable {
     var saveDiagnostics = true
     var talkMode = TalkMode.speaking
     /// Changing it invalidates the calibration, which was measured with the other source.
-    var irisSource = IrisSource.vision
+    var irisSource = IrisSource.gradient
     var glancesEnabled = true
-    /// Largest iris move in uv (fraction of eye width). Bigger moves look less natural.
-    var maxCorrection = 0.16
+    /// Largest iris move in uv (fraction of eye width). Above about 0.11 the lash line near the eye
+    /// corner starts to smear on real frames.
+    var maxCorrection = 0.11
     /// 0 corrects by the fixed calibrated reading offset; 1 follows the measured iris every frame,
     /// which also cancels the left-right reading sweep. Vision's pupil jitters only about ±0.01 uv,
     /// so half-following costs well under a pixel of jitter.
     var followReading = 0.5
-    /// Scales the calibrated reading offset. Landmark-based estimates under-read it; 1.4 matched a
-    /// camera-look frame best in a recorded session.
-    var correctionStrength = 1.4
+    /// Scales the calibrated reading offset, for estimators that under-read eye rotation (Vision's
+    /// pupil needed about 1.4×). The cleaned gradient locator measures it at full size.
+    var correctionStrength = 1.0
 }
 
 struct PipelineStats: Equatable {

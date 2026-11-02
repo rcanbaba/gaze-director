@@ -83,8 +83,8 @@ struct ContentView: View {
                     Text("Microphone access was denied.").font(.callout).foregroundStyle(.red)
                 }
                 Picker("Iris source", selection: $model.settings.irisSource) {
-                    Text("Vision pupil (steady)").tag(IrisSource.vision)
-                    Text("Gradient locator (experimental)").tag(IrisSource.gradient)
+                    Text("Gradient locator").tag(IrisSource.gradient)
+                    Text("Vision pupil (steady, under-reads)").tag(IrisSource.vision)
                 }
                 Toggle("Glance away now and then", isOn: $model.settings.glancesEnabled)
                 LabeledContent("Strength \(model.settings.correctionStrength.formatted(.number.precision(.fractionLength(1))))×") {

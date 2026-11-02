@@ -2,7 +2,7 @@
 // session, and writes a before/after sheet: both eyes at 2× (roughly how a call shows them) and
 // each eye at 6×.
 //
-// Usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0] [--follow 0]
+// Usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0] [--follow 0] [--max 0.16]
 //   Columns: reading frame as recorded | corrected | a frame from the camera step (the goal).
 
 import CoreGraphics
@@ -16,48 +16,32 @@ import UniformTypeIdentifiers
 let useGradient = CommandLine.arguments.contains("--gradient")
 var strength = 1.0
 var follow = 0.0
+var maxCorrection = 0.16
 var arguments: [String] = []
 var argumentIterator = CommandLine.arguments.makeIterator()
 while let argument = argumentIterator.next() {
     if argument == "--gradient" { continue }
     if argument == "--strength", let value = argumentIterator.next().flatMap(Double.init) { strength = value; continue }
     if argument == "--follow", let value = argumentIterator.next().flatMap(Double.init) { follow = value; continue }
+    if argument == "--max", let value = argumentIterator.next().flatMap(Double.init) { maxCorrection = value; continue }
     arguments.append(argument)
 }
 guard arguments.count == 5 else {
-    print("usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0] [--follow 0]")
+    print("usage: warp-frame <camera-step folder> <reading-step folder> <frame.png> <output.png> [--gradient] [--strength 1.0] [--follow 0] [--max 0.16]")
     exit(2)
 }
 
-guard let calibration = calibration(cameraFolder: arguments[1], readingFolder: arguments[2], useVisionPupil: !useGradient),
+// With --gradient the calibration is redone from the saved frames, since logged sessions may have
+// been recorded with Vision's pupil.
+let calibrated = useGradient
+    ? calibrationFromFrames(cameraFolder: arguments[1], readingFolder: arguments[2], source: .gradient)
+    : calibration(cameraFolder: arguments[1], readingFolder: arguments[2], useVisionPupil: true)
+guard let calibration = calibrated,
       let center = calibration.readingCenter else {
     print("calibration failed")
     exit(1)
 }
 print(String(format: "reading centre (%+.3f, %+.3f), offset used (%+.3f, %+.3f) uv, strength %.2f", center.x, center.y, calibration.readingOffset!.x, calibration.readingOffset!.y, strength))
-
-func loadFrame(_ path: String) -> CVPixelBuffer {
-    guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
-          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-        print("cannot read \(path)")
-        exit(1)
-    }
-    var buffer: CVPixelBuffer?
-    let attributes: [String: Any] = [
-        kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any](),
-        kCVPixelBufferMetalCompatibilityKey as String: true,
-    ]
-    CVPixelBufferCreate(nil, image.width, image.height, kCVPixelFormatType_32BGRA, attributes as CFDictionary, &buffer)
-    let frame = buffer!
-    CVPixelBufferLockBaseAddress(frame, [])
-    CGContext(
-        data: CVPixelBufferGetBaseAddress(frame), width: image.width, height: image.height, bitsPerComponent: 8,
-        bytesPerRow: CVPixelBufferGetBytesPerRow(frame), space: CGColorSpace(name: CGColorSpace.sRGB)!,
-        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-    )!.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-    CVPixelBufferUnlockBaseAddress(frame, [])
-    return frame
-}
 
 func measureEyes(_ frame: CVPixelBuffer) -> [EyeMeasurement] {
     guard let face = FaceTracker().detect(in: frame) else { return [] }
@@ -84,7 +68,7 @@ let reference = FileManager.default.fileExists(atPath: referencePath) ? loadFram
 let referenceEyes = reference.map(measureEyes) ?? []
 
 let output = DirectorOutput(target: .zero, weight: 1, state: .engaged)
-let warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: output, maxDisplacement: 0.16, follow: follow, strength: strength)
+let warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: output, maxDisplacement: maxCorrection, follow: follow, strength: strength)
 for (i, w) in warps.enumerated() {
     print(String(format: "eye %d: displacement (%+.1f, %+.1f) px", i, w.displacement.x, w.displacement.y))
 }

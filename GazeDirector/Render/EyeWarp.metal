@@ -34,16 +34,20 @@ static float2 displacementAt(float2 p, constant EyeWarp *eyes, uint count) {
         float qx = dot(q, ax);
         float qy = dot(q, ay);
 
-        // The whole iris shifts rigidly and the band around it (sclera, lid edges) stretches, so
-        // nothing tears. Vision's six-point eye contour is too coarse to clip by: on real faces it
-        // cuts through the iris, which held real moves to ~40% of the planned shift. So the weight
-        // follows the iris itself and the contour only pins the eye corners. Shifting the lids
-        // sideways along with it is barely visible, since lid lines run sideways anyway.
+        // The whole iris shifts rigidly and the band around it stretches, so nothing tears. Vision's
+        // six-point eye contour is too coarse to clip by: on real faces it cuts through the iris,
+        // which held real moves to ~40% of the planned shift. So the weights follow the iris itself
+        // and the contour only pins the eye corners.
         float cornerPin = 1.0 - smoothstep(0.75, 1.05, fabs(dot(p - e.center, ax)) / e.halfSize.x);
-        float irisWeight = (1.0 - smoothstep(1.0, 2.6, length(q) / e.irisRadius)) * cornerPin;
+        float radial = (1.0 - smoothstep(1.0, 2.6, length(q) / e.irisRadius)) * cornerPin;
 
-        // Looking up or down moves the lids too: the upper lid follows the iris closely, the lower
-        // lid less, and the eye corners stay pinned so the eye itself does not slide on the face.
+        // Sideways moves carry the lid lines along; stopping at the lids sheared the iris instead,
+        // which looked worse on real frames.
+        float sideways = radial;
+
+        // Looking up or down moves the lids too: the upper lid follows the iris, the lower lid about
+        // half as much, and the eye corners stay pinned so the eye itself does not slide on the face.
+        float vertical = radial * mix(1.0, 0.45, smoothstep(0.9, 1.4, qy / e.irisRadius));
         float sx = e.halfSize.x * 0.8;
         float sy = e.halfSize.y * 2.0 + e.irisRadius;
         float upper = 1.0 - smoothstep(-0.5, 0.5, qy / e.irisRadius);
@@ -51,9 +55,9 @@ static float2 displacementAt(float2 p, constant EyeWarp *eyes, uint count) {
         float lidWeight = lidShare * cornerPin
                         * exp(-(qx * qx / (2.0 * sx * sx) + qy * qy / (2.0 * sy * sy)))
                         * openingMask(p, e, float2(1.3, 3.2));
-        float verticalWeight = irisWeight + (1.0 - irisWeight) * lidWeight;
+        float verticalWeight = vertical + (1.0 - vertical) * lidWeight;
 
-        total += ax * (dot(e.displacement, ax) * irisWeight) + ay * (dot(e.displacement, ay) * verticalWeight);
+        total += ax * (dot(e.displacement, ax) * sideways) + ay * (dot(e.displacement, ay) * verticalWeight);
     }
     return total;
 }

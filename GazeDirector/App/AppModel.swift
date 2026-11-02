@@ -47,8 +47,9 @@ final class AppModel: ObservableObject {
     let voice = VoiceActivity()
     let pipeline: Pipeline
 
-    /// v2: calibrations are measured with Vision's pupil by default; v1 ones used the gradient locator.
-    private static let calibrationKey = "calibration.v2"
+    /// v3: calibrations are measured with the reflection-cleaned gradient locator by default; older
+    /// ones used Vision's pupil (v2) or the gradient locator without reflection removal (v1).
+    private static let calibrationKey = "calibration.v3"
 
     init() {
         pipeline = Pipeline(display: display)
