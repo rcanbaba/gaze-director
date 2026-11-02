@@ -74,8 +74,8 @@ struct ContentView: View {
                         } label: {
                             VStack(spacing: 1) {
                                 Text(gift.name).lineLimit(1)
-                                if index < 9 {
-                                    Text("⌃⌥\(index + 1)").font(.caption2).foregroundStyle(.secondary)
+                                if index < 18 {
+                                    Text(index < 9 ? "⌃⌥\(index + 1)" : "⌃⌥⇧\(index - 8)").font(.caption2).foregroundStyle(.secondary)
                                 }
                             }
                             .frame(maxWidth: .infinity)
@@ -86,7 +86,7 @@ struct ContentView: View {
                     Button("Open gifts folder") { model.openGiftsFolder() }
                     Button("Reload") { model.reloadGifts() }
                 }
-                Text("⌃⌥1–9 work while Teams, Meet or FaceTime is in front. Add side-by-side alpha videos (colour left, mask right) to the gifts folder.")
+                Text("Shortcuts work while Teams, Meet or FaceTime is in front. Add side-by-side alpha videos (colour left, mask right) to the gifts folder.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -56,11 +56,18 @@ Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*)
 3. Click **Install camera extension**, then approve it in System Settings → General → Login Items & Extensions → Camera Extensions.
 4. Pick **Gaze Director** as the camera in FaceTime, Photo Booth, Teams, Zoom or the browser. Keep the app open; it does the processing.
 
-## Gifts
+## Gifts and banners
 
-The sidebar plays gift animations over the outgoing video, so they show up in Photo Booth, FaceTime or a call. **⌃⌥1–9** trigger them while another app is in front. These are Carbon hot keys, so no Accessibility permission is needed.
+The sidebar plays gift animations and text banners over the outgoing video, so they show up in Photo Booth, FaceTime or a call. **⌃⌥1–9** trigger gifts 1–9 and **⌃⌥⇧1–9** trigger gifts 10–18 while another app is in front. These are Carbon hot keys, so no Accessibility permission is needed.
 
-Gifts are side-by-side alpha videos: colour on the left half, the alpha mask as grey on the right half (the layout live-stream gift effects use). They are composited with Core Image, and the mask floor is cleaned so compression grey does not wash out the gift area. Four original demo gifts ship in `GazeDirector/Resources/Gifts`; `Tools/GiftMaker` renders them. Your own gifts go in `~/Movies/GazeDirector/Gifts` and are not part of the repo.
+- **Format.** Gifts are side-by-side alpha videos: colour on the left half (premultiplied over black), the alpha mask as grey on the right half. This is the layout live-stream gift effects use, so gifts exported from a live-stream app work as they are.
+- **Compositing.** Core Image composites the gift as `colour × min(1, 3·mask) + camera × (1 − mask)`, after cleaning the mask floor left by video compression:
+  - The boosted weight keeps glows bright but drops the faint haze that renders leave where the mask is about zero.
+  - `CIAdditionCompositing` also adds alpha, so alpha is reset to 1. With alpha 2, the gift area washed out.
+- **Placement.** Portrait gifts are centred and fitted to the frame height. Landscape ones, such as the text banners, cover the whole frame.
+- **Shipped content.** Four original demo gifts (hearts, confetti, stars, applause) and two sliding banners ("Thank you for your time 🙏", "Great to meet you 👋") ship in `GazeDirector/Resources/Gifts`. `Tools/GiftMaker` renders them.
+- **Your own gifts.** Put them in `~/Movies/GazeDirector/Gifts`, then press **Reload**. They are not part of the repo.
+- **Mirrored self-view.** Photo Booth, FaceTime and Teams show your own preview mirrored, so banner text reads backwards to you. The people you call see it the right way round, as does the before/after clip.
 
 ## Tools
 

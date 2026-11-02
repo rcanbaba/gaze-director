@@ -11,10 +11,12 @@ struct GiftItem: Identifiable, Hashable {
 
     init(url: URL) {
         self.url = url
-        // "2-Confetti.mp4" → "Confetti"
+        // "4-Teddy-Bear.mp4" → "Teddy Bear"
         let base = url.deletingPathExtension().lastPathComponent
         let trimmed = base.drop { $0.isNumber }.drop { $0 == "-" || $0 == "_" || $0 == " " }
-        name = trimmed.isEmpty ? base : String(trimmed)
+        name = (trimmed.isEmpty ? base : String(trimmed))
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
     }
 
     /// Demo gifts shipped with the app, then any the user drops into ~/Movies/GazeDirector/Gifts.
@@ -107,11 +109,26 @@ final class GiftCompositor {
             "inputBiasVector": CIVector(x: -floor / (1 - 2 * floor), y: -floor / (1 - 2 * floor), z: -floor / (1 - 2 * floor), w: 0),
         ]).applyingFilter("CIColorClamp")
 
-        let result = colour.transformed(by: place)
-            .applyingFilter("CIBlendWithMask", parameters: [
-                kCIInputBackgroundImageKey: frameImage,
-                kCIInputMaskImageKey: cleanMask.transformed(by: place),
-            ])
+        // Gift colour is premultiplied over black, so the exact blend is colour + camera × (1 − mask).
+        // But renders often leave a faint coloured haze where the mask is ~0, and adding it washes
+        // out the whole gift area. Weighting colour by a boosted mask drops the haze where the gift
+        // is clear while keeping glows (mask 0.1–0.3) far brighter than a plain mask blend would.
+        let placedMask = cleanMask.transformed(by: place)
+        let colourWeight = placedMask.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CIVector(x: 3, y: 0, z: 0, w: 0),
+            "inputGVector": CIVector(x: 0, y: 3, z: 0, w: 0),
+            "inputBVector": CIVector(x: 0, y: 0, z: 3, w: 0),
+        ]).applyingFilter("CIColorClamp")
+        let weightedColour = colour.transformed(by: place)
+            .applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: colourWeight])
+        let cameraPart = CIImage(color: .black).cropped(to: bounds).applyingFilter("CIBlendWithMask", parameters: [
+            kCIInputBackgroundImageKey: frameImage,
+            kCIInputMaskImageKey: placedMask,
+        ])
+        // CIAdditionCompositing adds alpha too; alpha 2 washes the rendered area out, so reset it.
+        let result = weightedColour
+            .applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: cameraPart])
+            .settingAlphaOne(in: bounds)
             .cropped(to: bounds)
 
         let width = CVPixelBufferGetWidth(frame), height = CVPixelBufferGetHeight(frame)
