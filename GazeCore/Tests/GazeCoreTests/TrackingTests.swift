@@ -81,6 +81,25 @@ final class TrackingTests: XCTestCase {
         XCTAssertGreaterThan(out, 0.08, "should catch up with a saccade within a few frames")
     }
 
+    func testEyeTrackerUsesChosenIrisSource() throws {
+        let contour = ellipseContour(center: Vec2(100, 100), a: 25, b: 9, angle: 0)
+        let disk = Vec2(100, 100)
+        let hint = Vec2(105, 100)  // Vision's pupil, 0.1 eye widths off the dark disk
+        let luma: (Vec2) -> Float = { p in (p - disk).length < 10 ? 0.15 : 0.85 }
+
+        var vision = EyeTracker()
+        let fromVision = try XCTUnwrap(vision.update(contour: contour, pupil: hint, time: 0, luma: luma))
+        XCTAssertEqual(fromVision.rawIrisUV.x, 0.1, accuracy: 1e-9)
+        XCTAssertFalse(fromVision.refined)
+        XCTAssertEqual(try XCTUnwrap(fromVision.gradientUV).x, 0, accuracy: 0.03)
+
+        var gradient = EyeTracker()
+        gradient.source = .gradient
+        let fromGradient = try XCTUnwrap(gradient.update(contour: contour, pupil: hint, time: 0, luma: luma))
+        XCTAssertEqual(fromGradient.rawIrisUV.x, 0, accuracy: 0.03)
+        XCTAssertTrue(fromGradient.refined)
+    }
+
     func testEyeTrackerFreezesIrisDuringBlink() throws {
         var tracker = EyeTracker()
         let open = ellipseContour(center: Vec2(100, 100), a: 25, b: 9, angle: 0)

@@ -57,6 +57,10 @@ struct ContentView: View {
                 if model.microphoneDenied {
                     Text("Microphone access was denied.").font(.callout).foregroundStyle(.red)
                 }
+                Picker("Iris source", selection: $model.settings.irisSource) {
+                    Text("Vision pupil (steady)").tag(IrisSource.vision)
+                    Text("Gradient locator (experimental)").tag(IrisSource.gradient)
+                }
                 Toggle("Glance away now and then", isOn: $model.settings.glancesEnabled)
                 LabeledContent("Max correction") {
                     Slider(value: $model.settings.maxCorrection, in: 0.04...0.25)

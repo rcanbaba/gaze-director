@@ -26,10 +26,14 @@ struct DebugOverlay: View {
                 outline.closeSubpath()
                 context.stroke(outline, with: .color(eye.blinking ? .orange : .green.opacity(0.8)), lineWidth: 1)
 
+                // Raw candidates small, the smoothed estimate in use large.
                 if let pupil = eye.visionPupil {
                     dot(pupil, .yellow.opacity(0.8), radius: 2)
                 }
-                dot(eye.iris, eye.refined ? .cyan : .red, radius: 3)
+                if let gradient = eye.gradient {
+                    dot(gradient, .purple.opacity(0.9), radius: 2)
+                }
+                dot(eye.iris, .cyan, radius: 3)
 
                 if let target = eye.target {
                     var line = Path()

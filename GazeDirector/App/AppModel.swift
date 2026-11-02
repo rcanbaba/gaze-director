@@ -19,6 +19,10 @@ final class AppModel: ObservableObject {
         didSet {
             pipeline.settings.set(settings)
             if settings.talkMode != oldValue.talkMode { updateMicrophone() }
+            if settings.irisSource != oldValue.irisSource, calibration != nil {
+                calibration = nil
+                calibrationMessage = "Iris source changed. Calibrate again."
+            }
         }
     }
     @Published private(set) var calibration: Calibration? {
@@ -40,7 +44,8 @@ final class AppModel: ObservableObject {
     let voice = VoiceActivity()
     let pipeline: Pipeline
 
-    private static let calibrationKey = "calibration.v1"
+    /// v2: calibrations are measured with Vision's pupil by default; v1 ones used the gradient locator.
+    private static let calibrationKey = "calibration.v2"
 
     init() {
         pipeline = Pipeline(display: display)

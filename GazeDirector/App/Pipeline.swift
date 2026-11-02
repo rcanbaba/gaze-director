@@ -26,6 +26,8 @@ struct ProcessingSettings: Equatable {
     /// Save raw frames and measurements during calibration (locally) for offline analysis.
     var saveDiagnostics = true
     var talkMode = TalkMode.speaking
+    /// Changing it invalidates the calibration, which was measured with the other source.
+    var irisSource = IrisSource.vision
     var glancesEnabled = true
     /// Largest iris move in uv (fraction of eye width). Bigger moves look less natural.
     var maxCorrection = 0.16
@@ -46,8 +48,8 @@ struct DebugFrame {
         var contour: [CGPoint]
         var iris: CGPoint
         var visionPupil: CGPoint?
+        var gradient: CGPoint?
         var target: CGPoint?
-        var refined: Bool
         var blinking: Bool
     }
 
@@ -108,7 +110,10 @@ final class Pipeline: @unchecked Sendable {
         let calibration = calibration.get()
 
         let blinkThreshold = calibration?.blinkThreshold ?? 0.17
-        for i in eyeTrackers.indices { eyeTrackers[i].blinkThreshold = blinkThreshold }
+        for i in eyeTrackers.indices {
+            eyeTrackers[i].blinkThreshold = blinkThreshold
+            eyeTrackers[i].source = settings.irisSource
+        }
         let (eyes, yaw) = measureEyes(in: pixelBuffer, time: time)
 
         record(eyes, from: pixelBuffer, at: time, calibration: calibration, saveDiagnostics: settings.saveDiagnostics)
@@ -206,8 +211,8 @@ final class Pipeline: @unchecked Sendable {
                     contour: eye.frame.contour.map(cg),
                     iris: cg(eye.frame.point(at: eye.irisUV)),
                     visionPupil: eye.visionPupilUV.map { cg(eye.frame.point(at: $0)) },
+                    gradient: eye.gradientUV.map { cg(eye.frame.point(at: $0)) },
                     target: warps.indices.contains(i) ? cg(warps[i].iris + warps[i].displacement) : nil,
-                    refined: eye.refined,
                     blinking: eye.isBlinking
                 )
             }

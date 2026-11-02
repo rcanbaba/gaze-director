@@ -1,5 +1,15 @@
 import Foundation
 
+/// Where the per-frame iris estimate comes from.
+public enum IrisSource: String, CaseIterable, Sendable {
+    /// Vision's pupil landmark. Steady and consistent horizontally on real webcams, but it barely
+    /// moves vertically with gaze.
+    case vision
+    /// Gradient-based locator. Responds to vertical gaze, but screen reflections on dark irises can
+    /// make it jump between two positions.
+    case gradient
+}
+
 /// One eye as seen in a single frame.
 public struct EyeMeasurement: Sendable {
     public let frame: EyeFrame
@@ -8,24 +18,28 @@ public struct EyeMeasurement: Sendable {
     /// Unsmoothed iris centre in uv for this frame.
     public let rawIrisUV: Vec2
     public let visionPupilUV: Vec2?
-    /// True when the gradient locator produced the estimate, false when it fell back to Vision's pupil.
+    /// True when the gradient locator produced the estimate.
     public let refined: Bool
     public let isBlinking: Bool
+    /// The gradient locator's result, kept for comparison even when Vision's pupil is used.
+    public let gradientUV: Vec2?
 
-    public init(frame: EyeFrame, irisUV: Vec2, rawIrisUV: Vec2, visionPupilUV: Vec2?, refined: Bool, isBlinking: Bool) {
+    public init(frame: EyeFrame, irisUV: Vec2, rawIrisUV: Vec2, visionPupilUV: Vec2?, refined: Bool, isBlinking: Bool, gradientUV: Vec2? = nil) {
         self.frame = frame
         self.irisUV = irisUV
         self.rawIrisUV = rawIrisUV
         self.visionPupilUV = visionPupilUV
         self.refined = refined
         self.isBlinking = isBlinking
+        self.gradientUV = gradientUV
     }
 }
 
-/// Measures one eye over time: refines the iris centre, smooths it, and freezes it through blinks.
+/// Measures one eye over time: locates the iris centre, smooths it, and freezes it through blinks.
 public struct EyeTracker: Sendable {
     /// Openness (height / width) below which the eye counts as closed.
     public var blinkThreshold: Double = 0.17
+    public var source = IrisSource.vision
     public var layout = EyeCropLayout()
 
     private var filter = OneEuroFilter2D()
@@ -47,14 +61,16 @@ public struct EyeTracker: Sendable {
         let visionUV = pupil.map(frame.uv(of:))
 
         let crop = layout.crop(frame, luma: luma)
-        var refinedUV: Vec2?
+        var gradientUV: Vec2?
         if let p = IrisLocator.locate(in: crop.image, mask: crop.mask) {
             let uv = layout.uv(x: p.x, y: p.y)
             let plausible = abs(uv.x) < 0.45 && abs(uv.y) < 0.25
             let agrees = visionUV.map { (uv - $0).length < 0.2 } ?? true
-            if plausible && agrees { refinedUV = uv }
+            if plausible && agrees { gradientUV = uv }
         }
-        guard let raw = refinedUV ?? visionUV else { return nil }
+
+        let preferred = source == .vision ? visionUV : gradientUV
+        guard let raw = preferred ?? gradientUV ?? visionUV else { return nil }
 
         let blinking = frame.openness < blinkThreshold
         let iris: Vec2
@@ -69,8 +85,9 @@ public struct EyeTracker: Sendable {
             irisUV: iris,
             rawIrisUV: raw,
             visionPupilUV: visionUV,
-            refined: refinedUV != nil,
-            isBlinking: blinking
+            refined: raw == gradientUV,
+            isBlinking: blinking,
+            gradientUV: gradientUV
         )
     }
 }

@@ -23,6 +23,7 @@ final class DiagnosticsRecorder {
         var irisUV: Vec2
         var refined: Bool
         var blinking: Bool
+        var gradientUV: Vec2?
     }
 
     private struct FrameRecord: Codable {
@@ -77,7 +78,7 @@ final class DiagnosticsRecorder {
             EyeRecord(
                 contour: $0.frame.contour, center: $0.frame.center, width: $0.frame.width, openness: $0.frame.openness,
                 visionPupilUV: $0.visionPupilUV, rawIrisUV: $0.rawIrisUV, irisUV: $0.irisUV,
-                refined: $0.refined, blinking: $0.isBlinking
+                refined: $0.refined, blinking: $0.isBlinking, gradientUV: $0.gradientUV
             )
         })
         if var line = try? encoder.encode(record) {

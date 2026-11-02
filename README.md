@@ -22,6 +22,7 @@ Camera (AVCaptureSession, BGRA)
 - **Behaviour matters more than pixels.** Glance timing is randomised. Glances move as fast saccades (about 50 ms), not slow slides. You glance away more often while talking (2–3.5 s apart) than while listening (4–7 s apart). Blinks pass through. When you really look away or turn your head, the effect lets go.
 - **Calibrated to you.** You look at the camera lens once to record each iris's "eye contact" position. Then you read normally for 8 seconds, and the app learns the reading zone and the typical reading offset from where your eyes actually go.
 - **Steady, not twitchy.** On a real 1080p webcam, Vision gives only six contour points per eye and the per-frame iris estimate jitters by about ±2 px. That is as large as the whole reading offset. So the warp corrects by the fixed calibrated offset and leaves your own small eye movements alone. The *Follow reading motion* slider blends per-frame tracking back in if you want the left-right sweep cancelled too.
+- **Iris source.** By default the iris position is Vision's pupil landmark. In recorded sessions it was steady (±0.3 px while staring at the lens) and gave the same reading offset across sessions. The gradient locator is still available as an option. It reacts to vertical gaze better, but on dark irises a screen reflection in the pupil can make it jump between two spots. In one session that made the calibrated offset 2.5× too large.
 
 ## Build and run
 
@@ -53,6 +54,7 @@ Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*)
 
 ## Limitations
 
+- Vision's pupil barely moves vertically, so with the default iris source the correction is mostly horizontal. Keep the text roughly level with the camera, at the top of the screen.
 - Glasses with reflections, strong side light and big head turns make tracking and the warp less reliable.
 - The catchlight moves with the iris. At webcam resolution this is barely visible.
 - It looks most convincing in a normal call tile. Full-screen high-resolution viewing shows more.

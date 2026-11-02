@@ -22,6 +22,9 @@ struct FrameRecord: Decodable {
     var eyes: [EyeRecord]
 }
 
+/// `--vision` replays with Vision's pupil point as the iris estimate instead of the gradient locator.
+let useVisionPupil = CommandLine.arguments.contains("--vision")
+
 func load(_ folder: String) -> [(Double, [EyeMeasurement])] {
     let url = URL(fileURLWithPath: folder).appendingPathComponent("measurements.jsonl")
     guard let text = try? String(contentsOf: url, encoding: .utf8) else {
@@ -32,15 +35,16 @@ func load(_ folder: String) -> [(Double, [EyeMeasurement])] {
         guard let record = try? JSONDecoder().decode(FrameRecord.self, from: Data(line.utf8)) else { return nil }
         let eyes = record.eyes.compactMap { e -> EyeMeasurement? in
             guard let frame = EyeFrame(contour: e.contour) else { return nil }
-            return EyeMeasurement(frame: frame, irisUV: e.irisUV, rawIrisUV: e.rawIrisUV, visionPupilUV: e.visionPupilUV, refined: e.refined, isBlinking: e.blinking)
+            let iris = useVisionPupil ? (e.visionPupilUV ?? e.irisUV) : e.irisUV
+            return EyeMeasurement(frame: frame, irisUV: iris, rawIrisUV: e.rawIrisUV, visionPupilUV: e.visionPupilUV, refined: e.refined, isBlinking: e.blinking)
         }
         return (record.time, eyes.count == 2 ? eyes : [])
     }
 }
 
-let arguments = CommandLine.arguments
+let arguments = CommandLine.arguments.filter { $0 != "--vision" }
 guard arguments.count == 3 else {
-    print("usage: replay <camera-step folder> <reading-step folder>")
+    print("usage: replay [--vision] <camera-step folder> <reading-step folder>")
     exit(2)
 }
 let cameraFrames = load(arguments[1])
