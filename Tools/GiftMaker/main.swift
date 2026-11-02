@@ -4,15 +4,17 @@
 //
 // Usage: gift-maker <output folder>
 
+import AppKit
 import AVFoundation
 import CoreGraphics
 import CoreText
 import Foundation
 
+/// Portrait canvas for the burst gifts; the text banners use a landscape one.
 let half = (width: 720, height: 1280)
 let fps: Int32 = 30
 let duration = 3.0
-let frameCount = Int(duration * Double(fps))
+let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
 struct SplitMix64: RandomNumberGenerator {
     var state: UInt64
@@ -45,6 +47,8 @@ func envelope(_ t: Double) -> CGFloat {
 
 struct Gift {
     let name: String
+    var size = half
+    var duration = 3.0
     let draw: (CGContext, Double) -> Void
 }
 
@@ -127,7 +131,82 @@ func applause() -> Gift {
     }
 }
 
+func easeOut(_ x: Double) -> Double { 1 - pow(1 - min(1, max(0, x)), 3) }
+func easeIn(_ x: Double) -> Double { pow(min(1, max(0, x)), 3) }
+
+/// A rounded gradient pill with a line of text, in the lower third of a 16:9 frame. It sweeps in
+/// from the right, drifts slowly through the middle so it can be read, and leaves to the left.
+func banner(_ text: String, name: String, colors: [CGColor]) -> Gift {
+    let canvas = (width: 1280, height: 720)
+    let base = NSFont.systemFont(ofSize: 50, weight: .bold)
+    let font = NSFont(descriptor: base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor, size: 50) ?? base
+    let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [
+        .font: font, .foregroundColor: NSColor.white, .kern: 0.4,
+    ]))
+    var ascent: CGFloat = 0, descent: CGFloat = 0
+    let textWidth = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+    let pill = CGSize(width: textWidth + 104, height: 104)
+    let centreY: CGFloat = 150
+
+    let fill = CGGradient(colorsSpace: sRGB, colors: colors as CFArray, locations: nil)!
+    let gloss = CGGradient(colorsSpace: sRGB, colors: [CGColor(gray: 1, alpha: 0.28), CGColor(gray: 1, alpha: 0)] as CFArray, locations: [0, 1])!
+    let shine = CGGradient(colorsSpace: sRGB, colors: [CGColor(gray: 1, alpha: 0), CGColor(gray: 1, alpha: 0.5), CGColor(gray: 1, alpha: 0)] as CFArray, locations: [0, 0.5, 1])!
+
+    return Gift(name: name, size: canvas, duration: 6) { context, t in
+        let middle = CGFloat(canvas.width) / 2
+        let enter = CGFloat(canvas.width) + pill.width / 2 + 60, leave = -pill.width / 2 - 60
+        let x: CGFloat
+        if t < 1.0 {
+            x = enter + (middle + 70 - enter) * CGFloat(easeOut(t))
+        } else if t < 4.9 {
+            x = middle + 70 - 140 * CGFloat((t - 1.0) / 3.9)
+        } else {
+            x = middle - 70 + (leave - (middle - 70)) * CGFloat(easeIn((t - 4.9) / 1.1))
+        }
+        let rect = CGRect(x: x - pill.width / 2, y: centreY - pill.height / 2, width: pill.width, height: pill.height)
+        let path = CGPath(roundedRect: rect, cornerWidth: pill.height / 2, cornerHeight: pill.height / 2, transform: nil)
+
+        // Soft drop shadow; it reaches the mask as partial alpha and darkens the video under it.
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: -8), blur: 30, color: CGColor(gray: 0, alpha: 0.5))
+        context.addPath(path)
+        context.setFillColor(colors[0])
+        context.fillPath()
+        context.restoreGState()
+
+        context.saveGState()
+        context.addPath(path)
+        context.clip()
+        context.drawLinearGradient(fill, start: CGPoint(x: rect.minX, y: rect.midY), end: CGPoint(x: rect.maxX, y: rect.midY), options: [])
+        context.drawLinearGradient(gloss, start: CGPoint(x: rect.midX, y: rect.maxY), end: CGPoint(x: rect.midX, y: rect.midY), options: [])
+        // A light sweep across the pill once it has settled.
+        if t > 1.1, t < 2.1 {
+            let sweepX = rect.minX - 80 + (rect.width + 160) * CGFloat(t - 1.1)
+            context.translateBy(x: sweepX, y: rect.midY)
+            context.rotate(by: 0.35)
+            context.drawLinearGradient(shine, start: CGPoint(x: -45, y: 0), end: CGPoint(x: 45, y: 0), options: [])
+        }
+        context.restoreGState()
+
+        context.addPath(path)
+        context.setStrokeColor(CGColor(gray: 1, alpha: 0.35))
+        context.setLineWidth(2)
+        context.strokePath()
+
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: -2), blur: 6, color: CGColor(gray: 0, alpha: 0.3))
+        context.textPosition = CGPoint(x: rect.midX - textWidth / 2, y: rect.midY - (ascent - descent) / 2)
+        CTLineDraw(line, context)
+        context.restoreGState()
+
+        let twinkle = CGFloat(0.55 + 0.45 * sin(t * 7))
+        drawEmoji("✨", size: 48, at: CGPoint(x: rect.maxX - 26, y: rect.maxY + 6), alpha: twinkle, in: context)
+    }
+}
+
 func render(_ gift: Gift, to url: URL) throws {
+    let half = gift.size
+    let frameCount = Int(gift.duration * Double(fps))
     try? FileManager.default.removeItem(at: url)
     let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -145,9 +224,8 @@ func render(_ gift: Gift, to url: URL) throws {
     writer.startWriting()
     writer.startSession(atSourceTime: .zero)
 
-    let space = CGColorSpace(name: CGColorSpace.sRGB)!
     let layer = CGContext(data: nil, width: half.width, height: half.height, bitsPerComponent: 8, bytesPerRow: half.width * 4,
-                          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                          space: sRGB, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     for frame in 0..<frameCount {
         let t = Double(frame) / Double(fps)
         layer.clear(CGRect(x: 0, y: 0, width: half.width, height: half.height))
@@ -188,7 +266,18 @@ guard CommandLine.arguments.count == 2 else {
 }
 let folder = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-for (index, gift) in [hearts(), confetti(), stars(), applause()].enumerated() {
+let gifts = [
+    hearts(), confetti(), stars(), applause(),
+    banner("Thank you for your time 🙏", name: "Thank You", colors: [
+        CGColor(red: 0.34, green: 0.28, blue: 0.96, alpha: 1), CGColor(red: 0.62, green: 0.31, blue: 0.95, alpha: 1),
+        CGColor(red: 0.96, green: 0.36, blue: 0.62, alpha: 1),
+    ]),
+    banner("Great to meet you 👋", name: "Nice To Meet", colors: [
+        CGColor(red: 0.04, green: 0.66, blue: 0.74, alpha: 1), CGColor(red: 0.14, green: 0.46, blue: 0.96, alpha: 1),
+        CGColor(red: 0.44, green: 0.34, blue: 0.96, alpha: 1),
+    ]),
+]
+for (index, gift) in gifts.enumerated() {
     let url = folder.appendingPathComponent("\(index + 1)-\(gift.name).mp4")
     try render(gift, to: url)
     let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0

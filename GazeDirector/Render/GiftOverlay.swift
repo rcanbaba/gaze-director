@@ -73,8 +73,7 @@ final class GiftPlayback: @unchecked Sendable {
     }
 }
 
-/// Puts a gift frame over a camera frame with the mask as alpha, centred and fitted to the frame
-/// height.
+/// Puts a gift frame over a camera frame with the mask as alpha, centred.
 final class GiftCompositor {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var pool: CVPixelBufferPool?
@@ -89,7 +88,10 @@ final class GiftCompositor {
 
         let frameImage = CIImage(cvPixelBuffer: frame)
         let bounds = frameImage.extent
-        let scale = min(bounds.height * 0.95 / giftHeight, bounds.width * 0.9 / halfWidth)
+        // Landscape gifts (text banners) cover the whole frame; portrait ones fit its height.
+        let scale = halfWidth > giftHeight
+            ? min(bounds.width / halfWidth, bounds.height / giftHeight)
+            : min(bounds.height * 0.95 / giftHeight, bounds.width * 0.9 / halfWidth)
         let place = CGAffineTransform(scaleX: scale, y: scale).concatenating(CGAffineTransform(
             translationX: (bounds.width - halfWidth * scale) / 2,
             y: (bounds.height - giftHeight * scale) / 2
