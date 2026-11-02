@@ -15,7 +15,7 @@ final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             deviceTypes: [.builtInWideAngleCamera, .external, .continuityCamera],
             mediaType: .video,
             position: .unspecified
-        ).devices
+        ).devices.filter { $0.uniqueID != GazeCamera.deviceID.uuidString }  // never read our own output
     }
 
     func configure(deviceID: String?) {

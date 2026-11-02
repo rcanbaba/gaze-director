@@ -6,7 +6,8 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    DEVELOPMENT_TEAM: 7DVHVGQ6NV
+    # ARB Technology and Trade Consulting OU
+    DEVELOPMENT_TEAM: V4AN9PQ642
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
 packages:
@@ -18,8 +19,10 @@ targets:
     platform: macOS
     sources:
       - path: GazeDirector
+      - path: GazeCamera/GazeCameraShared.swift
     dependencies:
       - package: GazeCore
+      - target: GazeCamera
     info:
       path: GazeDirector/Info.plist
       properties:
@@ -32,11 +35,41 @@ targets:
       properties:
         com.apple.security.device.camera: true
         com.apple.security.device.audio-input: true
+        com.apple.developer.system-extension.install: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rcanbaba.GazeDirector
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
+
+  # Core Media I/O camera extension: the "Gaze Director" camera other apps can pick.
+  GazeCamera:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: GazeCamera
+    info:
+      path: GazeCamera/Info.plist
+      properties:
+        CFBundleDisplayName: Gaze Director Camera
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSSystemExtensionUsageDescription: Provides the Gaze Director camera with gaze-corrected video from the Gaze Director app.
+        CMIOExtension:
+          CMIOExtensionMachServiceName: $(TeamIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
+    entitlements:
+      path: GazeCamera/GazeCamera.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups:
+          - $(TeamIdentifierPrefix)com.rcanbaba.GazeDirector.GazeCamera
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rcanbaba.GazeDirector.GazeCamera
+        # System extension bundles are named after their identifier.
+        PRODUCT_NAME: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
 schemes:
   GazeDirector:
     build:

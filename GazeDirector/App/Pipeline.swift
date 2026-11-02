@@ -94,6 +94,7 @@ final class Pipeline: @unchecked Sendable {
 
     private let display: VideoDisplay
     private let warper = MetalWarper()
+    let virtualCamera = VirtualCameraOutput()
     private let exporter = FrameExporter()
     private lazy var diagnostics = DiagnosticsRecorder(exporter: exporter)
     private let faceTracker = FaceTracker()
@@ -147,6 +148,7 @@ final class Pipeline: @unchecked Sendable {
 
         let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
         display.show(output)
+        virtualCamera.send(output, time: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         recordClip(original: pixelBuffer, corrected: output, eyes: eyes, correcting: !warps.isEmpty && decision.weight > 0.5, time: time)
 
         frameCount += 1

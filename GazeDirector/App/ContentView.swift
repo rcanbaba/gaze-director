@@ -101,6 +101,18 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Virtual camera") {
+                LabeledContent("Status", value: model.virtualCameraConnected ? "Sending to “Gaze Director” camera" : "Extension not connected")
+                Button("Install camera extension") { model.installCameraExtension() }
+                if let status = model.extensionStatus {
+                    Text(status).font(.callout).foregroundStyle(.secondary)
+                }
+                Text("Pick “Gaze Director” as the camera in FaceTime, Photo Booth, Teams, Zoom or the browser. Keep this app open; it does the processing.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Remove camera extension", role: .destructive) { model.uninstallCameraExtension() }
+            }
+
             Section("Before / after clip") {
                 Button("Record 15 s clip, then read normally") { model.recordClip() }
                     .disabled(model.clipProgress != nil)

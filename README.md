@@ -47,6 +47,15 @@ To judge the result, use **Record 15 s clip** and read normally. Watching the li
 
 Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*), glances on/off, and max correction (in fractions of eye width; above roughly 0.16 the warp becomes noticeable).
 
+## Virtual camera
+
+`GazeCamera/` is a Core Media I/O camera extension embedded in the app. It exposes a **Gaze Director** camera with two streams. A sink stream receives the corrected frames from the app (scaled to 1280×720 BGRA, 30 fps). A source stream is what other apps read. While the app is not sending, the camera shows a placeholder.
+
+1. Signing needs an Apple Developer account in Xcode (Settings → Accounts) for the team in `project.yml`. The system extension install entitlement requires a provisioning profile.
+2. Build, copy `GazeDirector.app` to `/Applications` and open it from there.
+3. Click **Install camera extension**, then approve it in System Settings → General → Login Items & Extensions → Camera Extensions.
+4. Pick **Gaze Director** as the camera in FaceTime, Photo Booth, Teams, Zoom or the browser. Keep the app open; it does the processing.
+
 ## Tools
 
 - `GazeCore/` is a Swift package with all the testable logic: eye geometry, iris locator, One Euro filter, calibration, the director and the warp planner. Run its tests with `cd GazeCore && swift test`.
@@ -66,6 +75,6 @@ Settings: talk mode (*I'm talking* / *I'm listening* / *Detect with microphone*)
 
 ## Roadmap
 
-- [ ] CoreMediaIO Camera Extension, so Teams, Meet, Zoom and FaceTime can pick "Gaze Director" as a camera.
+- [x] CoreMediaIO Camera Extension, so Teams, Meet, Zoom, FaceTime and Photo Booth can pick "Gaze Director" as a camera.
 - [ ] Zoomed eye view for tuning.
 - [ ] Optional learned warp trained on your own calibration recordings.

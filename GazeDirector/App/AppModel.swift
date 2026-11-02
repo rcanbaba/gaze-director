@@ -41,10 +41,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var clipFailed = false
     @Published private(set) var cameraDenied = false
     @Published private(set) var microphoneDenied = false
+    @Published private(set) var extensionStatus: String?
+    @Published private(set) var virtualCameraConnected = false
 
     let display = VideoDisplay()
     let camera = CameraCapture()
     let voice = VoiceActivity()
+    let extensionInstaller = CameraExtensionInstaller()
     let pipeline: Pipeline
 
     /// v3: calibrations are measured with the reflection-cleaned gradient locator by default; older
@@ -53,6 +56,12 @@ final class AppModel: ObservableObject {
 
     init() {
         pipeline = Pipeline(display: display)
+        extensionInstaller.onStatus = { [weak self] status in
+            DispatchQueue.main.async { self?.extensionStatus = status }
+        }
+        pipeline.virtualCamera.onConnectionChange = { [weak self] connected in
+            DispatchQueue.main.async { self?.virtualCameraConnected = connected }
+        }
         pipeline.isSpeaking = { [voice] in voice.isSpeaking }
         pipeline.onStats = { [weak self] stats in
             DispatchQueue.main.async { self?.stats = stats }
@@ -161,6 +170,18 @@ final class AppModel: ObservableObject {
         } else {
             UserDefaults.standard.removeObject(forKey: Self.calibrationKey)
         }
+    }
+
+    // MARK: Virtual camera
+
+    func installCameraExtension() {
+        extensionStatus = "Installing…"
+        extensionInstaller.install()
+    }
+
+    func uninstallCameraExtension() {
+        extensionStatus = "Removing…"
+        extensionInstaller.uninstall()
     }
 
     // MARK: Before/after clip
