@@ -39,6 +39,8 @@ struct ProcessingSettings: Equatable {
     /// Scales the calibrated reading offset, for estimators that under-read eye rotation (Vision's
     /// pupil needed about 1.4×). The cleaned gradient locator measures it at full size.
     var correctionStrength = 1.0
+    /// Colour test filter on the outgoing frames.
+    var tint = Tint.none
 }
 
 struct PipelineStats: Equatable {
@@ -94,6 +96,7 @@ final class Pipeline: @unchecked Sendable {
 
     private let display: VideoDisplay
     private let warper = MetalWarper()
+    private let tinter = ColorTinter()
     let virtualCamera = VirtualCameraOutput()
     private let exporter = FrameExporter()
     private lazy var diagnostics = DiagnosticsRecorder(exporter: exporter)
@@ -146,7 +149,8 @@ final class Pipeline: @unchecked Sendable {
             warps = WarpPlanner.plan(eyes: eyes, calibration: calibration, output: decision, maxDisplacement: settings.maxCorrection, follow: settings.followReading, strength: settings.correctionStrength)
         }
 
-        let output = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
+        let warped = warper?.warp(pixelBuffer, eyes: warps) ?? pixelBuffer
+        let output = tinter.apply(settings.tint, to: warped)
         display.show(output)
         virtualCamera.send(output, time: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         recordClip(original: pixelBuffer, corrected: output, eyes: eyes, correcting: !warps.isEmpty && decision.weight > 0.5, time: time)

@@ -55,8 +55,27 @@ struct ContentView: View {
             .background(color.opacity(0.85), in: Capsule())
     }
 
+    private func tintButton(_ tint: Tint, title: String, color: Color) -> some View {
+        let active = model.settings.tint == tint
+        return Button(active ? "\(title) ✓" : title) {
+            model.settings.tint = active ? .none : tint
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(active ? color : .gray)
+    }
+
     private var sidebar: some View {
         Form {
+            Section("Test filter") {
+                HStack {
+                    tintButton(.red, title: "Red", color: .red)
+                    tintButton(.green, title: "Green", color: .green)
+                }
+                Text("Tints what the Gaze Director camera sends. Press again to remove.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Calibration") {
                 Button("Calibrate: lens 2 s, chime, read 8 s") { model.calibrateFully() }
                     .buttonStyle(.borderedProminent)
