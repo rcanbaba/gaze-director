@@ -1,7 +1,10 @@
 import CoreMediaIO
 import CoreVideo
+import os.log
 import QuartzCore
 import VideoToolbox
+
+private let log = Logger(subsystem: "com.rcanbaba.GazeDirector", category: "virtual-camera")
 
 /// Pushes corrected frames into the Gaze Director camera extension's sink stream, from where
 /// FaceTime, Photo Booth, Teams, Zoom and browsers read them. Used on the frame queue only.
@@ -9,22 +12,38 @@ final class VirtualCameraOutput {
     /// Called on the frame queue when the connection to the extension comes or goes.
     var onConnectionChange: ((Bool) -> Void)?
 
-    private var queue: CMSimpleQueue?
+    private var connection: (device: CMIOObjectID, sink: CMIOStreamID, queue: CMSimpleQueue)?
     private var transfer: VTPixelTransferSession?
     private var pool: CVPixelBufferPool?
     private var lastAttempt = -Double.infinity
+    /// When the queue last had room. The extension drains it every frame; a queue that stays full
+    /// means the extension restarted (for example after reinstalling) and the connection is stale.
+    private var lastRoom = CACurrentMediaTime()
+
+    init() {
+        // Let Core Media I/O deliver device-list changes on its own thread, so a camera extension
+        // installed while the app runs shows up without relaunching.
+        // kCMIOHardwarePropertyRunLoop ('rnlp') is not exported to Swift.
+        var address = Self.address(0x726E_6C70)
+        var noRunLoop: UnsafeMutableRawPointer?
+        CMIOObjectSetPropertyData(CMIOObjectID(kCMIOObjectSystemObject), &address, 0, nil, UInt32(MemoryLayout<UnsafeMutableRawPointer?>.size), &noRunLoop)
+    }
 
     func send(_ pixelBuffer: CVPixelBuffer, time: CMTime) {
-        if queue == nil {
+        let now = CACurrentMediaTime()
+        if connection == nil {
             // The extension may not be installed yet; look for it every couple of seconds.
-            let now = CACurrentMediaTime()
             guard now - lastAttempt > 2 else { return }
             lastAttempt = now
             connect()
         }
-        guard let queue, CMSimpleQueueGetCount(queue) < CMSimpleQueueGetCapacity(queue),
-              let scaled = scale(pixelBuffer),
-              let sample = Self.sampleBuffer(scaled, time: time) else { return }
+        guard let queue = connection?.queue else { return }
+        guard CMSimpleQueueGetCount(queue) < CMSimpleQueueGetCapacity(queue) else {
+            if now - lastRoom > 2 { disconnect(reason: "queue stayed full") }
+            return
+        }
+        lastRoom = now
+        guard let scaled = scale(pixelBuffer), let sample = Self.sampleBuffer(scaled, time: time) else { return }
         // The extension takes ownership of each queued buffer.
         if CMSimpleQueueEnqueue(queue, element: Unmanaged.passRetained(sample).toOpaque()) != noErr {
             Unmanaged.passUnretained(sample).release()
@@ -32,14 +51,40 @@ final class VirtualCameraOutput {
     }
 
     private func connect() {
-        guard let device = Self.findDevice(), let streams = Self.streams(of: device), streams.count >= 2 else { return }
+        guard let device = Self.findDevice() else {
+            log.debug("Gaze Director camera not found")
+            return
+        }
+        guard let streams = Self.streams(of: device), streams.count >= 2 else {
+            log.error("Gaze Director camera has \(Self.streams(of: device)?.count ?? 0) streams, expected 2")
+            return
+        }
         // The extension adds its source stream first and the sink stream second.
         let sink = streams[1]
         var queueRef: Unmanaged<CMSimpleQueue>?
-        guard CMIOStreamCopyBufferQueue(sink, { _, _, _ in }, nil, &queueRef) == noErr, let queueRef else { return }
-        guard CMIODeviceStartStream(device, sink) == noErr else { return }
-        queue = queueRef.takeRetainedValue()
+        let copyStatus = CMIOStreamCopyBufferQueue(sink, { _, _, _ in }, nil, &queueRef)
+        guard copyStatus == noErr, let queueRef else {
+            log.error("CMIOStreamCopyBufferQueue failed: \(copyStatus)")
+            return
+        }
+        let queue = queueRef.takeRetainedValue()
+        let startStatus = CMIODeviceStartStream(device, sink)
+        guard startStatus == noErr else {
+            log.error("CMIODeviceStartStream failed: \(startStatus)")
+            return
+        }
+        connection = (device, sink, queue)
+        lastRoom = CACurrentMediaTime()
+        log.notice("Connected to the Gaze Director camera sink")
         onConnectionChange?(true)
+    }
+
+    private func disconnect(reason: String) {
+        guard let connection else { return }
+        CMIODeviceStopStream(connection.device, connection.sink)
+        self.connection = nil
+        log.notice("Disconnected from the camera sink: \(reason, privacy: .public)")
+        onConnectionChange?(false)
     }
 
     private func scale(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
