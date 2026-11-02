@@ -27,6 +27,7 @@ targets:
       path: GazeDirector/Info.plist
       properties:
         CFBundleDisplayName: Gaze Director
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         NSCameraUsageDescription: Gaze Director uses the camera to track your eyes and redirect your gaze.
         NSMicrophoneUsageDescription: Gaze Director listens for your voice so it can glance away more often while you speak.
@@ -52,6 +53,8 @@ targets:
       path: GazeCamera/Info.plist
       properties:
         CFBundleDisplayName: Gaze Director Camera
+        # sysextd rejects extensions whose package type is not SYSX.
+        CFBundlePackageType: $(PRODUCT_BUNDLE_PACKAGE_TYPE)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         NSSystemExtensionUsageDescription: Provides the Gaze Director camera with gaze-corrected video from the Gaze Director app.
         CMIOExtension:
