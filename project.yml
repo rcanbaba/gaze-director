@@ -1,0 +1,39 @@
+name: GazeDirector
+options:
+  bundleIdPrefix: com.rcanbaba
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: 7DVHVGQ6NV
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+packages:
+  GazeCore:
+    path: GazeCore
+targets:
+  GazeDirector:
+    type: application
+    platform: macOS
+    sources:
+      - path: GazeDirector
+    dependencies:
+      - package: GazeCore
+    info:
+      path: GazeDirector/Info.plist
+      properties:
+        CFBundleDisplayName: Gaze Director
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSCameraUsageDescription: Gaze Director uses the camera to track your eyes and redirect your gaze.
+        NSMicrophoneUsageDescription: Gaze Director listens for your voice so it can glance away more often while you speak.
+    entitlements:
+      path: GazeDirector/GazeDirector.entitlements
+      properties:
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rcanbaba.GazeDirector
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
